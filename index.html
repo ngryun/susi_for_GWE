@@ -1098,6 +1098,65 @@
       border-color: #2563eb;
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
     }
+    /* Dept combo box (multi-select with search) */
+    .dept-combo { position: relative; min-width: 220px; max-width: 420px; flex-shrink: 1; }
+    .dept-combo-input-area {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      min-height: 36px; padding: 4px 8px;
+      border: 1px solid #cbd5e1; border-radius: 10px;
+      background: #fff; cursor: text;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .dept-combo-input-area.is-open {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.14);
+    }
+    .dept-combo-tag {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 2px 4px 2px 8px; border-radius: 6px;
+      background: #e0e7ff; color: #3730a3;
+      font-size: 12px; font-weight: 500; white-space: nowrap; line-height: 1.5;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .dept-combo-tag-label { overflow: hidden; text-overflow: ellipsis; }
+    .dept-combo-tag-remove {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; flex-shrink: 0;
+      border: none; border-radius: 50%; background: transparent;
+      color: #6366f1; cursor: pointer; font-size: 13px; line-height: 1; padding: 0;
+    }
+    .dept-combo-tag-remove:hover { background: #c7d2fe; color: #4338ca; }
+    .dept-combo-input {
+      flex: 1 1 80px; min-width: 60px; border: none; outline: none;
+      background: transparent; font: inherit; font-size: 13px;
+      color: var(--text-primary); padding: 3px 0;
+    }
+    .dept-combo-input::placeholder { color: #94a3b8; }
+    .dept-combo-dropdown {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      max-height: 240px; overflow-y: auto;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(15,23,42,.12); z-index: 110;
+    }
+    .dept-combo-dropdown.is-open { display: block; }
+    .dept-combo-option {
+      padding: 7px 12px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background .1s;
+    }
+    .dept-combo-option:hover { background: #f1f5f9; }
+    .dept-combo-option.is-selected { background: #eef2ff; color: #4338ca; font-weight: 600; }
+    .dept-combo-option .check-icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+    .dept-combo-empty { padding: 14px 12px; font-size: 13px; color: #94a3b8; text-align: center; }
+    .dept-combo-clear {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 3px 8px; border: none; border-radius: 6px;
+      background: #f1f5f9; color: #64748b; cursor: pointer;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+      transition: background .15s;
+    }
+    .dept-combo-clear:hover { background: #e2e8f0; color: #334155; }
     .detail-table-wrap {
       position: relative;
       isolation: isolate;
@@ -1573,12 +1632,18 @@
     }
 
     /* Year Filter Bar */
+    .global-filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 20px;
+      margin-top: 10px;
+      padding: 6px 0 2px;
+    }
     .year-filter-bar {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-top: 10px;
-      padding: 8px 0 4px;
     }
     .year-filter-label {
       font-size: 12px;
@@ -1920,6 +1985,7 @@
         width: 100%;
         max-width: none;
       }
+      .dept-combo { min-width: 0; max-width: none; width: 100%; }
       .detail-csat-grid {
         grid-template-columns: 1fr;
       }
@@ -2229,6 +2295,7 @@
         univDirectorySortKey: DEFAULT_UNIV_DIRECTORY_SORT,
         selectedDeptKeys: [],
         yearFilter: "all",
+        locationFilter: "all",
       },
       data: {
         reportRecords: [],
@@ -2251,6 +2318,7 @@
     const dataState = appState.data;
     const modalState = appState.modal;
     const trendState = appState.trend;
+    const deptComboState = { open: false, searchText: "", pending: null };
 
     generateBtn.addEventListener("click", handleGenerate);
     detailModalBackBtn.addEventListener("click", handleDetailModalBack);
@@ -2262,28 +2330,86 @@
       }
     });
     detailModalBodyEl.addEventListener("click", (event) => {
-      const pageActionTrigger = event.target instanceof Element ? event.target.closest("[data-detail-page-action]") : null;
+      const el = event.target instanceof Element ? event.target : null;
+      if (!el) return;
+      /* ── pagination ── */
+      const pageActionTrigger = el.closest("[data-detail-page-action]");
       if (pageActionTrigger) {
         handleDetailModalPageAction(pageActionTrigger.getAttribute("data-detail-page-action") || "");
         return;
       }
-      const target = event.target instanceof Element ? event.target.closest('[data-student-drilldown="true"]') : null;
+      /* ── dept combo: tag remove ── */
+      const removeBtn = el.closest("[data-dept-remove]");
+      if (removeBtn) {
+        event.stopPropagation();
+        const dept = removeBtn.dataset.deptRemove;
+        if (deptComboState.open && deptComboState.pending) {
+          const idx = deptComboState.pending.indexOf(dept);
+          if (idx >= 0) deptComboState.pending.splice(idx, 1);
+          syncDeptComboDOM();
+        } else {
+          const cv = modalState.viewStack[modalState.viewStack.length - 1];
+          if (cv) {
+            const arr = Array.isArray(cv.deptFilter) ? cv.deptFilter.filter(d => d !== dept) : [];
+            handleDetailDeptFilterChange(arr);
+          }
+        }
+        return;
+      }
+      /* ── dept combo: clear all ── */
+      if (el.closest("[data-dept-clear-all]")) {
+        event.stopPropagation();
+        if (deptComboState.open) {
+          deptComboState.pending = [];
+          syncDeptComboDOM();
+        } else {
+          handleDetailDeptFilterChange([]);
+        }
+        return;
+      }
+      /* ── dept combo: option toggle ── */
+      const optionEl = el.closest("[data-dept-option]");
+      if (optionEl) {
+        event.stopPropagation();
+        const dept = optionEl.dataset.deptOption;
+        if (!deptComboState.pending) deptComboState.pending = [];
+        const idx = deptComboState.pending.indexOf(dept);
+        if (idx >= 0) deptComboState.pending.splice(idx, 1);
+        else deptComboState.pending.push(dept);
+        syncDeptComboDOM();
+        return;
+      }
+      /* ── dept combo: open on input-area click ── */
+      if (el.closest("[data-dept-combo-area]")) {
+        openDeptCombo();
+        return;
+      }
+      /* ── student drilldown ── */
+      const target = el.closest('[data-student-drilldown="true"]');
       if (!target) return;
       openStudentDetailModal({
         student_key: target.dataset.studentKey || "",
         school_name: target.dataset.studentSchool || "",
       });
     });
-    detailModalBodyEl.addEventListener("change", (event) => {
-      const deptFilterSelect = event.target instanceof HTMLSelectElement && event.target.dataset.detailDeptFilter === "true"
-        ? event.target
-        : null;
-      if (!deptFilterSelect) return;
-      handleDetailDeptFilterChange(deptFilterSelect.value || "");
+    detailModalBodyEl.addEventListener("input", (event) => {
+      const input = event.target instanceof HTMLInputElement && event.target.dataset.deptComboInput === "true"
+        ? event.target : null;
+      if (!input) return;
+      deptComboState.searchText = input.value;
+      filterDeptComboDropdown(input.value);
+    });
+    document.addEventListener("click", (event) => {
+      if (!deptComboState.open) return;
+      const combo = document.getElementById("dept-combo");
+      if (combo && !combo.contains(event.target)) {
+        closeDeptCombo();
+      }
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !detailModalEl.hidden) {
-        closeDetailModal();
+      if (event.key === "Escape") {
+        if (deptComboState.open) { closeDeptCombo(); event.stopPropagation(); return; }
+        if (!detailModalEl.hidden) { closeDetailModal(); }
       }
     });
     window.addEventListener("resize", updateStickyTabOffset);
@@ -2448,6 +2574,7 @@
         dataState.studentCsatByKey = studentCsatByKey;
         const years = getAvailableYears(records);
         filterState.yearFilter = "all";
+        filterState.locationFilter = "all";
         updateGenerateProgress(
           "보고서 화면 구성 중",
           "표와 차트 영역을 준비하고 있습니다.",
@@ -2812,6 +2939,33 @@
       if (yearFilter === "all") return records;
       const year = parseInt(yearFilter, 10);
       return records.filter(r => r.academic_year === year);
+    }
+    function deriveLocationType(schoolLocation) {
+      const loc = safe(schoolLocation);
+      if (!loc) return "";
+      const lastChar = loc.charAt(loc.length - 1);
+      if (lastChar === "시") return "시";
+      if (lastChar === "군") return "군";
+      return "";
+    }
+    function filterRecordsByLocation(records, locationFilter) {
+      if (locationFilter === "all") return records;
+      return records.filter(r => deriveLocationType(r.school_location) === locationFilter);
+    }
+    function applyGlobalFilters(allRecords) {
+      let filtered = filterRecordsByYear(allRecords, filterState.yearFilter);
+      filtered = filterRecordsByLocation(filtered, filterState.locationFilter);
+      return filtered;
+    }
+    function hasMultipleLocationTypes(records) {
+      let hasSi = false, hasGun = false;
+      for (const r of records) {
+        const t = deriveLocationType(r.school_location);
+        if (t === "시") hasSi = true;
+        if (t === "군") hasGun = true;
+        if (hasSi && hasGun) return true;
+      }
+      return false;
     }
     function formatAcademicYearScope(records = []) {
       const years = getAvailableYears(records);
@@ -3412,12 +3566,22 @@ body.protected-export-locked {
             </div>
           <h2 class="university-title">수시 입시 결과 분석 프로그램</h2>
           <div id="header-build-info" class="header-build-info"></div>
-          ${metaYears.length > 1 ? `<div class="year-filter-bar" id="year-filter-bar">
-            <span class="year-filter-label">학년도</span>
-            <div class="segmented-control" id="year-filter-group">
-              <button type="button" class="segmented-btn ${filterState.yearFilter === "all" ? "active" : ""}" data-year="all">전체</button>
-              ${metaYears.map(y => `<button type="button" class="segmented-btn ${String(filterState.yearFilter) === String(y) ? "active" : ""}" data-year="${y}">${y}</button>`).join("")}
-            </div>
+          ${(metaYears.length > 1 || hasMultipleLocationTypes(metaAllRecords)) ? `<div class="global-filter-row">
+            ${metaYears.length > 1 ? `<div class="year-filter-bar" id="year-filter-bar">
+              <span class="year-filter-label">학년도</span>
+              <div class="segmented-control" id="year-filter-group">
+                <button type="button" class="segmented-btn ${filterState.yearFilter === "all" ? "active" : ""}" data-year="all">전체</button>
+                ${metaYears.map(y => `<button type="button" class="segmented-btn ${String(filterState.yearFilter) === String(y) ? "active" : ""}" data-year="${y}">${y}</button>`).join("")}
+              </div>
+            </div>` : ""}
+            ${hasMultipleLocationTypes(metaAllRecords) ? `<div class="year-filter-bar" id="location-filter-bar">
+              <span class="year-filter-label">소재지</span>
+              <div class="segmented-control" id="location-filter-group">
+                <button type="button" class="segmented-btn ${filterState.locationFilter === "all" ? "active" : ""}" data-location="all">전체</button>
+                <button type="button" class="segmented-btn ${filterState.locationFilter === "시" ? "active" : ""}" data-location="시">시</button>
+                <button type="button" class="segmented-btn ${filterState.locationFilter === "군" ? "active" : ""}" data-location="군">군</button>
+              </div>
+            </div>` : ""}
           </div>` : ""}
           </div>
         </div>`;
@@ -3495,7 +3659,8 @@ body.protected-export-locked {
         </div>`);
 
       if (filterState.yearFilter === "all" && metaYears.length > 1) {
-        summaryEl.insertAdjacentHTML("beforeend", buildYearComparisonSection(metaAllRecords, metaYears));
+        const locationFilteredAll = filterRecordsByLocation(metaAllRecords, filterState.locationFilter);
+        summaryEl.insertAdjacentHTML("beforeend", buildYearComparisonSection(locationFilteredAll, metaYears));
       }
 
       univEl.innerHTML = `<div class="dept-container">
@@ -3580,6 +3745,7 @@ body.protected-export-locked {
       renderStudentTrend(records);
       bindPlotExportButtons(reportEl);
       bindYearFilter(metaYears, metaAllRecords);
+      bindLocationFilter(metaYears, metaAllRecords);
       initLazyRendering(records, metaAllRecords, metaYears);
     }
 
@@ -3764,17 +3930,34 @@ body.protected-export-locked {
       </div>`;
     }
 
-	    function bindYearFilter(years, allRecords) {
-	      const group = document.getElementById("year-filter-group");
-	      if (!group) return;
+    function reapplyGlobalFilters(allRecords, years) {
+      const filtered = applyGlobalFilters(allRecords);
+      const uiState = getCurrentReportUiState();
+      renderFullReport(filtered, "", uiState.activeTab, uiState, { years, allRecords });
+    }
+
+    function bindYearFilter(years, allRecords) {
+      const group = document.getElementById("year-filter-group");
+      if (!group) return;
       group.querySelectorAll("[data-year]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const nextYear = btn.dataset.year;
           if (nextYear === filterState.yearFilter) return;
           filterState.yearFilter = nextYear;
-          const filtered = filterRecordsByYear(allRecords, nextYear);
-          const uiState = getCurrentReportUiState();
-          renderFullReport(filtered, "", uiState.activeTab, uiState, { years, allRecords });
+          reapplyGlobalFilters(allRecords, years);
+        });
+      });
+    }
+
+    function bindLocationFilter(years, allRecords) {
+      const group = document.getElementById("location-filter-group");
+      if (!group) return;
+      group.querySelectorAll("[data-location]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextLoc = btn.dataset.location;
+          if (nextLoc === filterState.locationFilter) return;
+          filterState.locationFilter = nextLoc;
+          reapplyGlobalFilters(allRecords, years);
         });
       });
     }
@@ -4225,11 +4408,12 @@ body.protected-export-locked {
 	      }
 	      const yrs = metaYears || [];
 	      const all = allRecords || records;
+	      const locFilteredAll = filterRecordsByLocation(all, filterState.locationFilter);
 	      if (document.getElementById("year-apptype-trend-table")) {
-	        renderState.auxRendererMap["year-apptype-trend-table"] = () => renderYearApptypeTrendTable(all, yrs, "year-apptype-trend-table");
+	        renderState.auxRendererMap["year-apptype-trend-table"] = () => renderYearApptypeTrendTable(locFilteredAll, yrs, "year-apptype-trend-table");
 	      }
 	      if (document.getElementById("year-univ-trend-table")) {
-	        renderState.auxRendererMap["year-univ-trend-table"] = () => renderYearUnivTrendTable(all, yrs, "year-univ-trend-table");
+	        renderState.auxRendererMap["year-univ-trend-table"] = () => renderYearUnivTrendTable(locFilteredAll, yrs, "year-univ-trend-table");
 	      }
 	    }
 
@@ -5486,8 +5670,9 @@ body.protected-export-locked {
 
     function getFilteredDetailRowsForView(view, detailRows = []) {
       if (view && (view.disableDeptFilter || view.type === "student")) return detailRows;
-      if (!view || !view.deptFilter) return detailRows;
-      return detailRows.filter((record) => (record.dept || "미상") === view.deptFilter);
+      const df = Array.isArray(view?.deptFilter) ? view.deptFilter : [];
+      if (!df.length) return detailRows;
+      return detailRows.filter((record) => df.includes(record.dept || "미상"));
     }
 
     function buildDetailToolbarHtml(options = {}) {
@@ -5496,24 +5681,34 @@ body.protected-export-locked {
         totalCount = 0,
         filteredCount = totalCount,
         deptOptions = [],
-        deptFilter = "",
+        deptFilter = [],
         showDeptFilter = true,
       } = options;
-      const hasDeptFilter = !!deptFilter;
+      const selectedDepts = Array.isArray(deptFilter) ? deptFilter : [];
+      const hasDeptFilter = selectedDepts.length > 0;
       const totalLabel = totalCount.toLocaleString();
       const filteredLabel = filteredCount.toLocaleString();
       const rangeText = pagination && filteredCount
         ? `${(pagination.startIndex + 1).toLocaleString()}~${pagination.endIndex.toLocaleString()}건`
         : `${filteredLabel}건`;
       const metaText = hasDeptFilter
-        ? `모집단위 ${deptFilter} 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`} · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`
+        ? `모집단위 ${selectedDepts.length}개 선택 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`} · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`
         : `총 ${filteredLabel}건 중 ${rangeText} 표시 · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`;
       const deptFilterHtml = showDeptFilter && deptOptions.length > 1 ? `<div class="detail-filter-group">
-        <label class="detail-filter-label" for="detail-dept-filter">모집단위</label>
-        <select id="detail-dept-filter" class="detail-filter-select" data-detail-dept-filter="true">
-          <option value="">전체 모집단위</option>
-          ${deptOptions.map((dept) => `<option value="${escapeHtml(dept)}"${deptFilter === dept ? " selected" : ""}>${escapeHtml(dept)}</option>`).join("")}
-        </select>
+        <label class="detail-filter-label">모집단위</label>
+        <div class="dept-combo" id="dept-combo">
+          <div class="dept-combo-input-area" data-dept-combo-area="true">
+            ${selectedDepts.map(d => `<span class="dept-combo-tag" data-dept="${escapeHtml(d)}"><span class="dept-combo-tag-label">${escapeHtml(d)}</span><button type="button" class="dept-combo-tag-remove" data-dept-remove="${escapeHtml(d)}" title="제거">×</button></span>`).join("")}
+            ${hasDeptFilter ? `<button type="button" class="dept-combo-clear" data-dept-clear-all="true" title="전체 해제">초기화</button>` : ""}
+            <input class="dept-combo-input" data-dept-combo-input="true" placeholder="${hasDeptFilter ? "" : "모집단위 검색..."}" autocomplete="off" />
+          </div>
+          <div class="dept-combo-dropdown" id="dept-combo-dropdown">
+            ${deptOptions.map(d => {
+              const sel = selectedDepts.includes(d);
+              return `<div class="dept-combo-option${sel ? " is-selected" : ""}" data-dept-option="${escapeHtml(d)}"><span class="check-icon">${sel ? "✓" : ""}</span><span>${escapeHtml(d)}</span></div>`;
+            }).join("")}
+          </div>
+        </div>
       </div>` : "";
       const paginationHtml = buildDetailPaginationHtml(pagination, filteredCount);
       if (!deptFilterHtml && !paginationHtml) return "";
@@ -5706,7 +5901,7 @@ body.protected-export-locked {
       };
     }
 
-    function getDetailTableColumns(includeUniv = false) {
+    function getDetailTableColumns(includeUniv = false, { hideRural = false } = {}) {
       const columns = [
         { header: "학년도", colClass: "detail-col-year", value: (r) => r.academic_year || "-" },
       ];
@@ -5722,8 +5917,10 @@ body.protected-export-locked {
         { header: "등록", colClass: "detail-col-register", value: (r) => formatRegistrationDisplay(r.registered_yn) },
         { header: "전교과등급", colClass: "detail-col-grade", render: (r) => renderDetailAllSubjGradeCell(r) },
         { header: "환산(일반)", colClass: "detail-col-conv", render: (r) => renderDetailConvGradeCell(r) },
-        { header: "농어촌", colClass: "detail-col-rural", value: (r) => r.is_rural || "-" },
       );
+      if (!hideRural) {
+        columns.push({ header: "농어촌", colClass: "detail-col-rural", value: (r) => r.is_rural || "-" });
+      }
       return columns;
     }
 
@@ -5774,9 +5971,10 @@ body.protected-export-locked {
         filteredCount = records.length,
         prependHtml = "",
         showDeptFilter = true,
+        hideRural = false,
       } = options;
       if (!records.length) return '<div class="empty">데이터 없음</div>';
-      const columns = getDetailTableColumns(includeUniv);
+      const columns = getDetailTableColumns(includeUniv, { hideRural });
       const rows = records.map((r) => {
         const rowClassParts = [
           r.result === "합격" ? "detail-row-pass" : r.result === "충원합격" ? "detail-row-wait" : "",
@@ -5800,7 +5998,7 @@ body.protected-export-locked {
         totalCount,
         filteredCount,
         deptOptions: options.deptOptions || [],
-        deptFilter: options.deptFilter || "",
+        deptFilter: Array.isArray(options.deptFilter) ? options.deptFilter : [],
         showDeptFilter,
       });
       return `<div class="detail-modal-content">
@@ -5943,11 +6141,14 @@ body.protected-export-locked {
       }
       if (view.type === "student") {
         const studentContext = buildStudentContextLabel(view.student, detailRows);
+        const isRural = detailRows.some(r => safe(r.is_rural) === "O");
+        const subtitleParts = [studentContext, isRural ? "농어촌 O" : "", totalText].filter(Boolean);
         return {
           title: "학생 지원 전체 목록",
-          subtitle: `${studentContext} · ${totalText}`,
+          subtitle: subtitleParts.join(" · "),
           tableOptions: {
             includeUniv: true,
+            hideRural: true,
             prependHtml: buildStudentCsatSummaryHtml(view.student, detailRows),
             showDeptFilter: false,
           },
@@ -6022,7 +6223,7 @@ body.protected-export-locked {
         totalCount: detailRows.length,
         filteredCount: filteredRows.length,
         deptOptions,
-        deptFilter: currentView.deptFilter || "",
+        deptFilter: Array.isArray(currentView.deptFilter) ? currentView.deptFilter : [],
       });
       detailModalEl.hidden = false;
       document.body.style.overflow = "hidden";
@@ -6095,12 +6296,105 @@ body.protected-export-locked {
       renderDetailModalView();
     }
 
-    function handleDetailDeptFilterChange(deptFilter) {
+    function handleDetailDeptFilterChange(deptFilters) {
       const currentView = modalState.viewStack[modalState.viewStack.length - 1];
       if (!currentView) return;
-      currentView.deptFilter = deptFilter || "";
+      currentView.deptFilter = Array.isArray(deptFilters) ? [...deptFilters] : [];
       currentView.page = 1;
       renderDetailModalView();
+    }
+
+    /* ── Dept combo box management ── */
+    function openDeptCombo() {
+      const combo = document.getElementById("dept-combo");
+      if (!combo) return;
+      if (deptComboState.open) return;
+      const dropdown = combo.querySelector("#dept-combo-dropdown");
+      const inputArea = combo.querySelector("[data-dept-combo-area]");
+      const input = combo.querySelector("[data-dept-combo-input]");
+      if (!dropdown || !inputArea || !input) return;
+      const cv = modalState.viewStack[modalState.viewStack.length - 1];
+      deptComboState.pending = Array.isArray(cv?.deptFilter) ? [...cv.deptFilter] : [];
+      deptComboState.open = true;
+      deptComboState.searchText = "";
+      dropdown.classList.add("is-open");
+      inputArea.classList.add("is-open");
+      input.value = "";
+      input.placeholder = "검색어 입력...";
+      input.focus();
+    }
+    function closeDeptCombo() {
+      if (!deptComboState.open) return;
+      deptComboState.open = false;
+      const combo = document.getElementById("dept-combo");
+      if (combo) {
+        const dd = combo.querySelector("#dept-combo-dropdown");
+        const ia = combo.querySelector("[data-dept-combo-area]");
+        if (dd) dd.classList.remove("is-open");
+        if (ia) ia.classList.remove("is-open");
+      }
+      if (deptComboState.pending) {
+        const cv = modalState.viewStack[modalState.viewStack.length - 1];
+        const current = Array.isArray(cv?.deptFilter) ? cv.deptFilter : [];
+        const pending = deptComboState.pending;
+        const changed = current.length !== pending.length || current.slice().sort().join("\0") !== pending.slice().sort().join("\0");
+        if (changed) handleDetailDeptFilterChange(pending);
+      }
+      deptComboState.pending = null;
+      deptComboState.searchText = "";
+    }
+    function syncDeptComboDOM() {
+      const combo = document.getElementById("dept-combo");
+      if (!combo || !deptComboState.pending) return;
+      const pending = deptComboState.pending;
+      const inputArea = combo.querySelector("[data-dept-combo-area]");
+      const input = combo.querySelector("[data-dept-combo-input]");
+      if (!inputArea || !input) return;
+      inputArea.querySelectorAll(".dept-combo-tag, .dept-combo-clear").forEach(el => el.remove());
+      pending.forEach(d => {
+        const tag = document.createElement("span");
+        tag.className = "dept-combo-tag";
+        tag.dataset.dept = d;
+        tag.innerHTML = `<span class="dept-combo-tag-label">${escapeHtml(d)}</span><button type="button" class="dept-combo-tag-remove" data-dept-remove="${escapeHtml(d)}" title="제거">×</button>`;
+        inputArea.insertBefore(tag, input);
+      });
+      if (pending.length) {
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "dept-combo-clear";
+        clearBtn.dataset.deptClearAll = "true";
+        clearBtn.title = "전체 해제";
+        clearBtn.textContent = "초기화";
+        inputArea.insertBefore(clearBtn, input);
+      }
+      input.placeholder = pending.length ? "" : "검색어 입력...";
+      combo.querySelectorAll("[data-dept-option]").forEach(opt => {
+        const dept = opt.dataset.deptOption;
+        const isSel = pending.includes(dept);
+        opt.classList.toggle("is-selected", isSel);
+        const icon = opt.querySelector(".check-icon");
+        if (icon) icon.textContent = isSel ? "✓" : "";
+      });
+    }
+    function filterDeptComboDropdown(searchText) {
+      const dropdown = document.getElementById("dept-combo-dropdown");
+      if (!dropdown) return;
+      const q = (searchText || "").trim().toLowerCase();
+      let visibleCount = 0;
+      dropdown.querySelectorAll(".dept-combo-option").forEach(opt => {
+        const dept = (opt.dataset.deptOption || "").toLowerCase();
+        const match = !q || dept.includes(q);
+        opt.style.display = match ? "" : "none";
+        if (match) visibleCount++;
+      });
+      let emptyMsg = dropdown.querySelector(".dept-combo-empty");
+      if (visibleCount === 0) {
+        if (!emptyMsg) { emptyMsg = document.createElement("div"); emptyMsg.className = "dept-combo-empty"; dropdown.appendChild(emptyMsg); }
+        emptyMsg.textContent = q ? `"${searchText.trim()}" 검색 결과 없음` : "항목 없음";
+        emptyMsg.style.display = "";
+      } else if (emptyMsg) {
+        emptyMsg.style.display = "none";
+      }
     }
 
     function handleDetailModalBack() {
@@ -6370,6 +6664,7 @@ body.protected-export-locked {
       dataState.studentCsatByKey = restoreStudentCsatMap(window.PRELOADED_STUDENT_CSAT);
       const years = getAvailableYears(normalizedRecords);
       filterState.yearFilter = "all";
+      filterState.locationFilter = "all";
       const preloadedState = window.PRELOADED_UI_STATE && typeof window.PRELOADED_UI_STATE === "object"
         ? window.PRELOADED_UI_STATE
         : {};
