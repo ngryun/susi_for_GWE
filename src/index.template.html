@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>강원진학센터 수시 입시 결과 통계프로그램</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+{{INLINE_STYLE}}
+  </style>
+</head>
+<body>
+  <header id="landing-hero" class="hero">
+    <h1>수시 입시 결과 분석 프로그램</h1>
+    <p>- 2026 강원진학센터 입시분석팀 -</p>
+    <div id="hero-build-info" class="hero-build-info"></div>
+  </header>
+
+  <section id="upload-panel" class="panel">
+    <h2>엑셀 업로드</h2>
+    <div style="margin-top: 0; margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">연도별 엑셀 파일을 여러 개 동시에 선택하여 업로드할 수 있습니다.</div>
+    <div class="field">
+      <input type="file" id="file-input" accept=".xlsx,.xls" multiple />
+      <div class="actions">
+        <button class="primary" id="generate-btn">보고서 생성</button>
+      </div>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section id="report" hidden></section>
+  <div id="generate-progress-overlay" class="generate-progress-overlay" hidden>
+    <div class="generate-progress-card" role="status" aria-live="polite" aria-atomic="true">
+      <div class="generate-progress-label">보고서 생성 중</div>
+      <div id="generate-progress-title" class="generate-progress-title">엑셀 파일을 준비하고 있습니다.</div>
+      <div id="generate-progress-message" class="generate-progress-message">파일 수와 데이터 양에 따라 시간이 조금 걸릴 수 있습니다.</div>
+      <div class="generate-progress-bar" aria-hidden="true">
+        <div id="generate-progress-fill" class="generate-progress-fill"></div>
+      </div>
+      <div class="generate-progress-meta">
+        <span id="generate-progress-percent">0%</span>
+        <span id="generate-progress-detail" class="generate-progress-detail">잠시만 기다려주세요.</span>
+      </div>
+    </div>
+  </div>
+  <footer class="site-footer">2026 강원진학센터 입시분석팀(남궁연. 설악고)</footer>
+
+  <div id="detail-modal" class="detail-modal" hidden>
+    <div class="detail-modal-backdrop" data-modal-close="true"></div>
+    <div class="detail-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+      <div class="detail-modal-head">
+        <div>
+          <h3 id="detail-modal-title" class="detail-modal-title">상세 데이터</h3>
+          <div id="detail-modal-subtitle" class="detail-modal-subtitle"></div>
+        </div>
+        <div class="detail-modal-actions">
+          <button type="button" class="detail-modal-back" id="detail-modal-back" hidden>뒤로</button>
+          <button type="button" class="detail-modal-export" id="detail-modal-export" hidden>엑셀 저장</button>
+          <button type="button" class="detail-modal-close" id="detail-modal-close">닫기</button>
+        </div>
+      </div>
+      <div class="detail-modal-body" id="detail-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <script>
+{{INLINE_APP_JS}}
+  </script>
+</body>
+</html>
