@@ -1507,6 +1507,25 @@
       border-color: #cbd5e1;
       color: #334155;
     }
+    /* 교과별 내신 등급 pill */
+    .subject-grade-pill {
+      display: inline-flex; align-items: center;
+      padding: 2px 10px; border-radius: 8px;
+      font-size: 13px; font-weight: 700; line-height: 1.5;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid rgba(148,163,184,0.26);
+      background: #fff; color: #0f172a;
+    }
+    .subject-grade-pill.is-grade-1 { background: #d1fae5; border-color: #10b981; color: #047857; }
+    .subject-grade-pill.is-grade-2 { background: #dcfce7; border-color: #22c55e; color: #15803d; }
+    .subject-grade-pill.is-grade-3 { background: #ccfbf1; border-color: #14b8a6; color: #0f766e; }
+    .subject-grade-pill.is-grade-4 { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
+    .subject-grade-pill.is-grade-5 { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
+    .subject-grade-pill.is-grade-6 { background: #ffedd5; border-color: #f97316; color: #c2410c; }
+    .subject-grade-pill.is-grade-7 { background: #fce7f3; border-color: #ec4899; color: #be185d; }
+    .subject-grade-pill.is-grade-8 { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+    .subject-grade-pill.is-grade-9 { background: #e2e8f0; border-color: #64748b; color: #334155; }
+    .subject-grade-pill.is-grade-unknown { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
     .detail-csat-list {
       margin-top: 8px;
     }
@@ -2256,6 +2275,8 @@
     const DETAIL_MODAL_PAGE_SIZE = 200;
     const STUDENT_TREND_PAGE_SIZE = 100;
     const EXCEL_PARSE_CHUNK_SIZE = 1200;
+    const SUBJECT_GRADE_COL_START = 29; // AD
+    const SUBJECT_GRADE_COL_END = 33;   // AH
     const CSAT_COLUMN_START = 57; // BF
     const CSAT_COLUMN_END = 76;   // BY
 
@@ -2302,6 +2323,7 @@
         loadedRecords: [],
         detailViewRowsCache: new Map(),
         studentCsatByKey: new Map(),
+        studentSubjectGradeByKey: new Map(),
       },
       modal: {
         viewStack: [],
@@ -2514,6 +2536,7 @@
 
         const allParsed = [];
         const studentCsatByKey = new Map();
+        const studentSubjectGradeByKey = new Map();
         let loadedRecordCount = 0;
         let totalSkippedCount = 0;
         const parsingProgressShare = 76;
@@ -2546,6 +2569,7 @@
           });
           allParsed.push(parsed.records);
           mergeStudentCsatMaps(studentCsatByKey, parsed.studentCsatByKey);
+          mergeSubjectGradeMaps(studentSubjectGradeByKey, parsed.studentSubjectGradeByKey);
           loadedRecordCount += parsed.records.length;
           totalSkippedCount += (parsed.skippedCount || 0);
           updateGenerateProgress(
@@ -2572,6 +2596,7 @@
         await nextUiPaint();
         dataState.loadedRecords = records;
         dataState.studentCsatByKey = studentCsatByKey;
+        dataState.studentSubjectGradeByKey = studentSubjectGradeByKey;
         const years = getAvailableYears(records);
         filterState.yearFilter = "all";
         filterState.locationFilter = "all";
@@ -2613,6 +2638,7 @@
             const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
             const rows = allRows.slice(3); // skip first 3 rows
             const csatColumnDescriptors = buildStudentCsatColumnDescriptors(sheet, allRows);
+            const subjectGradeDescriptors = buildSubjectGradeDescriptors(sheet, allRows);
 
             const COL = {
               school_name: 0,       // A: 고등학교명
@@ -2636,6 +2662,7 @@
 
             const records = [];
             const studentCsatByKey = new Map();
+            const studentSubjectGradeByKey = new Map();
             const totalRows = rows.length;
             if (typeof onProgress === "function") {
               onProgress({ ratio: totalRows ? 0.02 : 1, processedRows: 0, totalRows, validCount: 0 });
@@ -2676,6 +2703,10 @@
                     );
                   }
                 }
+                if (subjectGradeDescriptors.length && !studentSubjectGradeByKey.has(rec.student_key)) {
+                  const sg = createSubjectGradeFromRow(row, subjectGradeDescriptors);
+                  if (sg.length) studentSubjectGradeByKey.set(rec.student_key, sg);
+                }
               }
               if (typeof onProgress === "function") {
                 onProgress({
@@ -2688,7 +2719,7 @@
               await nextUiPaint();
             }
             const skippedCount = totalRows - records.length;
-            resolve({ records, studentCsatByKey, skippedCount });
+            resolve({ records, studentCsatByKey, studentSubjectGradeByKey, skippedCount });
           } catch (err) {
             reject(err);
           }
@@ -2856,6 +2887,48 @@
         }
       });
       return restored;
+    }
+
+    /* ── 교과(군)별 내신성적 ── */
+    function buildSubjectGradeDescriptors(sheet, headerRows = []) {
+      const descriptors = [];
+      for (let colIndex = SUBJECT_GRADE_COL_START; colIndex <= SUBJECT_GRADE_COL_END; colIndex++) {
+        const label = getMergedHeaderValue(sheet, headerRows, 0, colIndex)
+          || getMergedHeaderValue(sheet, headerRows, 1, colIndex)
+          || getMergedHeaderValue(sheet, headerRows, 2, colIndex);
+        if (!label) continue;
+        descriptors.push({ colIndex, label });
+      }
+      return descriptors;
+    }
+    function createSubjectGradeFromRow(row = [], descriptors = []) {
+      return descriptors
+        .map(d => {
+          const raw = safe(row[d.colIndex]);
+          if (!raw) return null;
+          const num = parseFloat(raw);
+          return { label: d.label, value: Number.isFinite(num) ? num : raw };
+        })
+        .filter(Boolean);
+    }
+    function mergeSubjectGradeMaps(target, source) {
+      if (!(target instanceof Map) || !(source instanceof Map)) return target;
+      source.forEach((grades, key) => {
+        if (!target.has(key) && grades.length) target.set(key, grades);
+      });
+      return target;
+    }
+    function serializeSubjectGradeMap(map = new Map()) {
+      const out = {};
+      if (!(map instanceof Map)) return out;
+      map.forEach((grades, key) => { if (grades.length) out[key] = grades; });
+      return out;
+    }
+    function restoreSubjectGradeMap(raw) {
+      const m = new Map();
+      if (!raw || typeof raw !== "object") return m;
+      Object.entries(raw).forEach(([k, v]) => { if (Array.isArray(v) && v.length) m.set(k, v); });
+      return m;
     }
 
     function safe(v) { return v === undefined || v === null ? "" : String(v).trim(); }
@@ -3262,6 +3335,7 @@ body.protected-export-locked {
         const payload = JSON.parse(new TextDecoder().decode(decrypted));
         window.PRELOADED_DATA = payload.analysisData;
         window.PRELOADED_STUDENT_CSAT = payload.studentCsatData || {};
+        window.PRELOADED_SUBJECT_GRADE = payload.subjectGradeData || {};
         window.PRELOADED_UI_STATE = payload.uiState;
         document.body.classList.remove("protected-export-locked");
         overlay.remove();
@@ -3348,6 +3422,7 @@ body.protected-export-locked {
         const encryptedPayload = await encryptExportPayload(password, {
           analysisData: sanitizeRecordsForShared(records),
           studentCsatData: serializeStudentCsatMap(dataState.studentCsatByKey),
+          subjectGradeData: serializeSubjectGradeMap(dataState.studentSubjectGradeByKey),
           uiState,
         });
         preloadScript.textContent = escapeInlineScriptContent(buildProtectedHtmlBootstrap(encryptedPayload));
@@ -3357,6 +3432,7 @@ body.protected-export-locked {
           "window.PRELOADED_SHARED = true;",
           `window.PRELOADED_DATA = ${serializeForInlineScript(sanitizeRecordsForShared(records))};`,
           `window.PRELOADED_STUDENT_CSAT = ${serializeForInlineScript(serializeStudentCsatMap(dataState.studentCsatByKey))};`,
+          `window.PRELOADED_SUBJECT_GRADE = ${serializeForInlineScript(serializeSubjectGradeMap(dataState.studentSubjectGradeByKey))};`,
           `window.PRELOADED_UI_STATE = ${serializeForInlineScript(uiState)};`,
         ].join("\n");
       }
@@ -5601,6 +5677,33 @@ body.protected-export-locked {
       </section>`;
     }
 
+    function buildStudentSubjectGradeSummaryHtml(student, detailRows = []) {
+      const studentKey = getStudentRecordKey(student) || detailRows.find((row) => getStudentRecordKey(row))?.student_key || "";
+      const grades = studentKey ? (dataState.studentSubjectGradeByKey.get(studentKey) || []) : [];
+      if (!grades.length) return "";
+      const yearLabel = formatAcademicYearScope(detailRows);
+      const subtitle = yearLabel ? `${yearLabel} 기준 교과(군)별 내신 등급` : "교과(군)별 내신 등급";
+      return `<section class="detail-csat-card">
+        <div class="detail-csat-head">
+          <div class="detail-csat-title">교과별 내신 성적</div>
+          <div class="detail-csat-subtitle">${escapeHtml(subtitle)}</div>
+        </div>
+        <div class="detail-csat-grid">
+          ${grades.map((g) => {
+            const display = typeof g.value === "number" ? g.value.toFixed(2) : String(g.value);
+            const gradeNum = typeof g.value === "number" ? Math.floor(g.value) : parseStudentCsatGradeNumber(display);
+            const gradeClass = gradeNum && gradeNum >= 1 && gradeNum <= 9 ? ` is-grade-${gradeNum}` : " is-grade-unknown";
+            return `<article class="detail-csat-subject">
+            <div class="detail-csat-subject-head">
+              <div class="detail-csat-subject-title">${escapeHtml(g.label)}</div>
+              <span class="subject-grade-pill${gradeClass}">${escapeHtml(display)}</span>
+            </div>
+          </article>`;
+          }).join("")}
+        </div>
+      </section>`;
+    }
+
     function createDetailModalView(config) {
       return {
         page: 1,
@@ -6149,7 +6252,7 @@ body.protected-export-locked {
           tableOptions: {
             includeUniv: true,
             hideRural: true,
-            prependHtml: buildStudentCsatSummaryHtml(view.student, detailRows),
+            prependHtml: buildStudentSubjectGradeSummaryHtml(view.student, detailRows) + buildStudentCsatSummaryHtml(view.student, detailRows),
             showDeptFilter: false,
           },
           disableDeptFilter: true,
@@ -6662,6 +6765,7 @@ body.protected-export-locked {
       const normalizedRecords = normalizeLoadedRecords(window.PRELOADED_DATA);
       dataState.loadedRecords = normalizedRecords;
       dataState.studentCsatByKey = restoreStudentCsatMap(window.PRELOADED_STUDENT_CSAT);
+      dataState.studentSubjectGradeByKey = restoreSubjectGradeMap(window.PRELOADED_SUBJECT_GRADE);
       const years = getAvailableYears(normalizedRecords);
       filterState.yearFilter = "all";
       filterState.locationFilter = "all";
