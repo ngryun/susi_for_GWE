@@ -106,6 +106,21 @@
       align-items: center;
     }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .privacy-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      background: var(--success-light);
+      border: 1px solid var(--success-border);
+      color: var(--success);
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 500;
+    }
+    .privacy-notice strong { font-weight: 700; }
     input[type="file"] {
       flex: 1;
       min-width: 200px;
@@ -1986,6 +2001,10 @@
         <button class="primary" id="generate-btn">보고서 생성</button>
       </div>
     </div>
+    <div class="privacy-notice">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>업로드된 파일은 <strong>외부 서버로 전송되지 않으며</strong>, 오직 본인의 컴퓨터(브라우저) 안에서만 처리됩니다. 페이지를 닫으면 모든 데이터가 자동으로 삭제됩니다.</span>
+    </div>
     <div id="status"></div>
   </section>
 
@@ -2363,13 +2382,14 @@
           "업로드 확인 중",
           `엑셀 ${files.length}개 파일을 순서대로 불러오고 있습니다.`,
           3,
-          "브라우저를 닫지 말고 잠시만 기다려주세요."
+          "서버 전송 없이 내 컴퓨터에서만 처리됩니다."
         );
         await nextUiPaint();
 
         const allParsed = [];
         const studentCsatByKey = new Map();
         let loadedRecordCount = 0;
+        let totalSkippedCount = 0;
         const parsingProgressShare = 76;
         for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
           const file = files[fileIndex];
@@ -2401,6 +2421,7 @@
           allParsed.push(parsed.records);
           mergeStudentCsatMaps(studentCsatByKey, parsed.studentCsatByKey);
           loadedRecordCount += parsed.records.length;
+          totalSkippedCount += (parsed.skippedCount || 0);
           updateGenerateProgress(
             `엑셀 ${fileIndex + 1}/${files.length} 완료`,
             `${file.name} 처리가 끝났습니다.`,
@@ -2436,14 +2457,15 @@
         await nextUiPaint();
         renderFullReport(records, "", "summary", {}, { years, allRecords: records });
         const fileText = files.length > 1 ? `${files.length}개 파일에서 ` : "";
+        const skippedText = totalSkippedCount > 0 ? ` (${totalSkippedCount.toLocaleString()}건 필수항목 누락으로 제외)` : "";
         setLandingVisibility(false);
         updateGenerateProgress(
           "생성 완료",
           "보고서가 준비되었습니다.",
           100,
-          `${fileText}총 ${records.length.toLocaleString()}건`
+          `${fileText}총 ${records.length.toLocaleString()}건${skippedText}`
         );
-        setStatus(`${fileText}총 ${records.length}건 로드 완료. 보고서가 생성되었습니다.`);
+        setStatus(`${fileText}총 ${records.length}건 로드 완료.${skippedText} 보고서가 생성되었습니다.`);
         await waitForRender(180);
         hideGenerateProgress();
       } catch (e) {
@@ -2538,7 +2560,8 @@
               }
               await nextUiPaint();
             }
-            resolve({ records, studentCsatByKey });
+            const skippedCount = totalRows - records.length;
+            resolve({ records, studentCsatByKey, skippedCount });
           } catch (err) {
             reject(err);
           }
@@ -3302,6 +3325,11 @@ body.protected-export-locked {
         renderState.auxIntersectionObserver = null;
       }
       renderState.auxRendererMap = {};
+      if (typeof Plotly !== "undefined" && reportEl) {
+        reportEl.querySelectorAll(".plot-container").forEach((el) => {
+          try { Plotly.purge(el); } catch (_) {}
+        });
+      }
     }
 
     function resetReportRuntimeState(records, options = {}) {
