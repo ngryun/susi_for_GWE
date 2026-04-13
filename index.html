@@ -531,6 +531,15 @@
       min-height: 76px;
       font-weight: 600;
     }
+    .year-trend-table td[data-apptype-click],
+    .year-univ-trend-table td[data-univ-click] {
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .year-trend-table td[data-apptype-click]:hover,
+    .year-univ-trend-table td[data-univ-click]:hover {
+      background: rgba(37, 99, 235, 0.06);
+    }
     .summary-link {
       border: none;
       background: transparent;
@@ -3931,9 +3940,9 @@ body.protected-export-locked {
                 formatUnivPassBandSampleText(passBandMeta.sampleCount),
               ])
             : renderDetailTextCell(rate);
-          return `<td style="text-align:center;">${d.total}</td><td style="text-align:center;">${rateCell}</td>`;
+          return `<td data-univ-click="${escapeHtml(univ)}" data-year="${y}" style="text-align:center;">${d.total}</td><td data-univ-click="${escapeHtml(univ)}" data-year="${y}" style="text-align:center;">${rateCell}</td>`;
         }).join("");
-        return `<tr><td style="width:${UNIV_COL_WIDTH}px;min-width:${UNIV_COL_WIDTH}px;max-width:${UNIV_COL_WIDTH}px;font-weight:500;"><span class="detail-cell-ellipsis" title="${escapeHtml(univ)}">${escapeHtml(univ)}</span></td>${cells}</tr>`;
+        return `<tr><td data-univ-click="${escapeHtml(univ)}" style="width:${UNIV_COL_WIDTH}px;min-width:${UNIV_COL_WIDTH}px;max-width:${UNIV_COL_WIDTH}px;font-weight:500;"><span class="detail-cell-ellipsis" title="${escapeHtml(univ)}">${escapeHtml(univ)}</span></td>${cells}</tr>`;
       }).join("");
 	      el.innerHTML = `<div class="summary-table-wrap"><div style="overflow-x:auto;">
 	        <table class="summary-table year-univ-trend-table">
@@ -3942,6 +3951,16 @@ body.protected-export-locked {
 	          <tbody>${bodyRows}</tbody>
 	        </table>
 	      </div></div>`;
+	      el.onclick = (event) => {
+	        const trigger = event.target instanceof Element ? event.target.closest("[data-univ-click]") : null;
+	        if (!trigger) return;
+	        const univ = trigger.getAttribute("data-univ-click") || "";
+	        if (!univ) return;
+	        const year = trigger.getAttribute("data-year") || "";
+	        const filtered = year ? allRecords.filter(r => String(r.academic_year) === year) : allRecords;
+	        dataState.detailViewRowsCache = new Map();
+	        openUnivDetailModal(univ, filtered);
+	      };
 	    }
 
     function renderYearApptypeTrendTable(allRecords, years, containerId) {
@@ -3973,7 +3992,7 @@ body.protected-export-locked {
             const yearEntry = data.byYear[year] || { total: 0, pass: 0 };
             const rate = yearEntry.total ? ((yearEntry.pass / yearEntry.total) * 100).toFixed(1) + "%" : "-";
             const share = yearTotals[year] ? ((yearEntry.total / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
-            return `<td style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
+            return `<td data-apptype-click="${escapeHtml(apptype)}" data-year="${year}" style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
               <div class="year-trend-cell">
                 <div class="year-trend-count">지원 ${yearEntry.total.toLocaleString()}건</div>
                 <div class="year-trend-share">지원 비율 ${escapeHtml(share)}</div>
@@ -3982,7 +4001,7 @@ body.protected-export-locked {
             </td>`;
           }).join("");
           return `<tr>
-            <td style="width:${APPTYPE_COL_WIDTH}px;min-width:${APPTYPE_COL_WIDTH}px;max-width:${APPTYPE_COL_WIDTH}px;"><span class="detail-cell-ellipsis year-trend-label" title="${escapeHtml(apptype)}">${escapeHtml(apptype)}</span></td>
+            <td data-apptype-click="${escapeHtml(apptype)}" style="width:${APPTYPE_COL_WIDTH}px;min-width:${APPTYPE_COL_WIDTH}px;max-width:${APPTYPE_COL_WIDTH}px;"><span class="detail-cell-ellipsis year-trend-label" title="${escapeHtml(apptype)}">${escapeHtml(apptype)}</span></td>
             ${yearCells}
           </tr>`;
         }).join("");
@@ -4004,6 +4023,16 @@ body.protected-export-locked {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+      el.onclick = (event) => {
+        const trigger = event.target instanceof Element ? event.target.closest("[data-apptype-click]") : null;
+        if (!trigger) return;
+        const apptype = trigger.getAttribute("data-apptype-click") || "";
+        if (!apptype) return;
+        const year = trigger.getAttribute("data-year") || "";
+        const filtered = year ? allRecords.filter(r => String(r.academic_year) === year) : allRecords;
+        dataState.detailViewRowsCache = new Map();
+        openCategoryDetailModal("apptype", apptype, apptype, filtered);
+      };
     }
 
     function reapplyGlobalFilters(allRecords, years) {
