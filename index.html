@@ -1276,6 +1276,14 @@
       vertical-align: middle;
       overflow: visible;
     }
+    .detail-table th.detail-align-center,
+    .detail-table td.detail-align-center {
+      text-align: center;
+    }
+    .detail-table th.detail-align-right,
+    .detail-table td.detail-align-right {
+      text-align: right;
+    }
     .detail-table col.detail-col-class { width: 56px; }
     .detail-table col.detail-col-region { width: 92px; }
     .detail-table col.detail-col-univ { width: 126px; }
@@ -1853,55 +1861,52 @@
       align-items: center;
     }
     .chart-action-btn {
-      border: 1px solid #cbd5e1;
-      background: #ffffff;
-      color: #334155;
-      padding: 6px 10px;
-      border-radius: 999px;
+      border: 0;
+      background: transparent;
+      color: #c2cad5;
+      padding: 4px;
+      border-radius: 8px;
       font: inherit;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       line-height: 1.2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
-      transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+      transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
     }
     .chart-action-btn:hover {
-      border-color: #94a3b8;
-      background: #f8fafc;
-      transform: translateY(-1px);
+      background: rgba(148, 163, 184, 0.12);
+      color: #94a3b8;
     }
     .chart-action-btn.is-open {
-      border-color: #93c5fd;
-      background: #eff6ff;
-      color: #1d4ed8;
+      background: rgba(148, 163, 184, 0.16);
+      color: #8793a3;
+    }
+    .chart-action-btn:focus-visible {
+      outline: 2px solid rgba(148, 163, 184, 0.28);
+      outline-offset: 2px;
     }
     .chart-action-btn:disabled {
-      opacity: 0.68;
+      opacity: 0.48;
       cursor: progress;
-      transform: none;
     }
     .chart-action-btn-content {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 0;
     }
     .chart-action-btn.is-icon-only {
-      padding: 6px 8px;
-    }
-    .chart-action-btn.is-icon-only .chart-action-btn-content {
-      gap: 4px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
     }
     .chart-action-icon {
-      width: 14px;
-      height: 14px;
+      width: 15px;
+      height: 15px;
       display: inline-block;
       flex: 0 0 auto;
-    }
-    .chart-action-caret {
-      font-size: 10px;
-      line-height: 1;
-      color: currentColor;
-      transform: translateY(1px);
     }
     .chart-export-popover[hidden] {
       display: none;
@@ -2471,6 +2476,7 @@
       render: {
         plotRegistryData: {},
         initializedPlots: {},
+        chartTableRegistry: {},
         plotIntersectionObserver: null,
         auxIntersectionObserver: null,
         auxRendererMap: {},
@@ -2483,6 +2489,7 @@
         selectedUnivKeys: [],
         deptFinderGroupingMode: DEFAULT_DEPT_FINDER_GROUPING_MODE,
         selectedDeptKeys: [],
+        selectedSubtypeKeys: [],
         yearFilter: "all",
         locationFilter: "all",
       },
@@ -2512,6 +2519,7 @@
     const analyticsViewState = {
       univTab: { active: false, entries: [], univ: "" },
       deptTab: { active: false, entries: [] },
+      subtypeTab: { active: false, entries: [] },
     };
 
     generateBtn.addEventListener("click", handleGenerate);
@@ -2583,7 +2591,6 @@
       if (!target) return;
       openStudentDetailModal({
         student_key: target.dataset.studentKey || "",
-        school_name: target.dataset.studentSchool || "",
       });
     });
     detailModalBodyEl.addEventListener("input", (event) => {
@@ -2813,7 +2820,7 @@
             const subjectGradeDescriptors = buildSubjectGradeDescriptors(sheet, allRows);
 
             const COL = {
-              school_name: 0,       // A: 고등학교명
+              school_name: 0,       // A: 고등학교명 (업로드 직후 폐기)
               student_key: 1,       // B: 학생 고유코드
               academic_year: 2,     // C: 학년도
               school_location: 3,   // D: 소재지
@@ -2836,6 +2843,11 @@
             const studentCsatByKey = new Map();
             const studentSubjectGradeByKey = new Map();
             const totalRows = rows.length;
+            rows.forEach((row) => {
+              if (Array.isArray(row) && row.length > COL.school_name) {
+                row[COL.school_name] = "";
+              }
+            });
             if (typeof onProgress === "function") {
               onProgress({ ratio: totalRows ? 0.02 : 1, processedRows: 0, totalRows, validCount: 0 });
             }
@@ -2846,7 +2858,6 @@
                 const studentKeyRaw = safe(row[COL.student_key]);
                 const rec = normalizeLoadedRecord({
                   student_key: studentKeyRaw || `S${String(records.length + 1).padStart(5, "0")}`,
-                  school_name: safe(row[COL.school_name]),
                   academic_year: parseAcademicYear(row[COL.academic_year]),
                   school_location: safe(row[COL.school_location]),
                   is_rural: parseIsRural(row[COL.is_rural]),
@@ -3150,7 +3161,6 @@
     function normalizeLoadedRecord(rawRecord, fallbackIndex = 0, resolveStudentKey = null) {
       const normalized = {
         student_key: safe(rawRecord.student_key) || `S${String(fallbackIndex + 1).padStart(5, "0")}`,
-        school_name: safe(rawRecord.school_name),
         academic_year: parseAcademicYear(rawRecord.academic_year),
         school_location: safe(rawRecord.school_location),
         is_rural: parseIsRural(rawRecord.is_rural),
@@ -3280,42 +3290,65 @@
         univTopMode: filterState.univTopDisplayMode,
         univTopSort: filterState.univTopSortKey,
         univDirectorySort: filterState.univDirectorySortKey,
+        univFinderQuery: safe(document.getElementById("univ-directory-search")?.value),
         univFinderSelection: Array.isArray(filterState.selectedUnivKeys) ? [...filterState.selectedUnivKeys] : [],
         deptFinderGroupingMode: filterState.deptFinderGroupingMode || DEFAULT_DEPT_FINDER_GROUPING_MODE,
+        deptFinderQuery: safe(document.getElementById("dept-finder-search")?.value),
         deptFinderSelection: Array.isArray(filterState.selectedDeptKeys) ? [...filterState.selectedDeptKeys] : [],
+        subtypeFinderQuery: safe(document.getElementById("subtype-finder-search")?.value),
+        subtypeFinderSelection: Array.isArray(filterState.selectedSubtypeKeys) ? [...filterState.selectedSubtypeKeys] : [],
         univAnalytics: {
           active: analyticsViewState.univTab.active,
           univ: analyticsViewState.univTab.entries[0] ? analyticsViewState.univTab.entries[0].univ : (analyticsViewState.univTab.univ || ""),
           entries: analyticsViewState.univTab.entries.map((entry) => ({ key: entry.key, univ: entry.univ })),
         },
         deptAnalytics: { active: analyticsViewState.deptTab.active, entries: analyticsViewState.deptTab.entries.map(e => ({ ...e })) },
+        subtypeAnalytics: { active: analyticsViewState.subtypeTab.active, entries: analyticsViewState.subtypeTab.entries.map(e => ({ ...e })) },
       };
     }
-    function buildPlotExportButtons(targetId, filenameBase, exportTitle = "") {
-      return `<div class="chart-action-group">
-        <div class="chart-export-menu" data-chart-export-menu="true">
-          <button type="button" class="chart-action-btn is-icon-only" data-chart-export-toggle="true" aria-expanded="false" aria-haspopup="menu" aria-label="차트 내보내기" title="차트를 이미지로 저장합니다.">
-            <span class="chart-action-btn-content">
-              <svg class="chart-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M8 1.5a.75.75 0 0 1 .75.75v6.19l1.97-1.97a.75.75 0 1 1 1.06 1.06L8.53 10.81a.75.75 0 0 1-1.06 0L4.22 7.56a.75.75 0 1 1 1.06-1.06l1.97 1.97V2.25A.75.75 0 0 1 8 1.5Z" fill="currentColor"></path>
-                <path d="M3 11.5a1 1 0 0 0-1 1V13a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13v-.5a1 1 0 1 0-2 0v.5a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13v-.5a1 1 0 0 0-1-1Z" fill="currentColor"></path>
-              </svg>
-              <span class="chart-action-caret" aria-hidden="true">▾</span>
-            </span>
-          </button>
-          <div class="chart-export-popover" data-chart-export-popover="true" role="menu" hidden>
-            <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="png" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="메신저 공유나 빠른 첨부용은 PNG가 편합니다.">PNG 저장</button>
-            <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="svg" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="문서 삽입과 확대용은 SVG를 권장합니다.">SVG 저장</button>
-          </div>
+    function buildPlotExportMenu(targetId, filenameBase, exportTitle = "") {
+      return `<div class="chart-export-menu" data-chart-export-menu="true">
+        <button type="button" class="chart-action-btn is-icon-only" data-chart-export-toggle="true" aria-expanded="false" aria-haspopup="menu" aria-label="차트 내보내기" title="차트를 이미지로 저장합니다.">
+          <span class="chart-action-btn-content">
+            <svg class="chart-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 1.5a.75.75 0 0 1 .75.75v6.19l1.97-1.97a.75.75 0 1 1 1.06 1.06L8.53 10.81a.75.75 0 0 1-1.06 0L4.22 7.56a.75.75 0 1 1 1.06-1.06l1.97 1.97V2.25A.75.75 0 0 1 8 1.5Z" fill="currentColor"></path>
+              <path d="M3 11.5a1 1 0 0 0-1 1V13a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13v-.5a1 1 0 1 0-2 0v.5a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13v-.5a1 1 0 0 0-1-1Z" fill="currentColor"></path>
+            </svg>
+          </span>
+        </button>
+        <div class="chart-export-popover" data-chart-export-popover="true" role="menu" hidden>
+          <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="png" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="메신저 공유나 빠른 첨부용은 PNG가 편합니다.">PNG 저장</button>
+          <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="svg" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="문서 삽입과 확대용은 SVG를 권장합니다.">SVG 저장</button>
         </div>
       </div>`;
+    }
+    function buildPlotTableButton(targetId) {
+      return `<button type="button" class="chart-action-btn is-icon-only" data-plot-table-target="${escapeHtml(targetId)}" aria-label="차트 데이터를 표로 보기" title="차트 데이터를 표로 봅니다.">
+        <span class="chart-action-btn-content">
+          <svg class="chart-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M2.25 2.5A1.25 1.25 0 0 1 3.5 1.25h9A1.25 1.25 0 0 1 13.75 2.5v11A1.25 1.25 0 0 1 12.5 14.75h-9A1.25 1.25 0 0 1 2.25 13.5v-11Zm1.5.25v2h8.5v-2h-8.5Zm8.5 3.5h-2.5v2h2.5v-2Zm0 3.5h-2.5v2h2.5v-2Zm-4 0h-4.5v2h4.5v-2Zm-4.5-3.5v2h4.5v-2h-4.5Z" fill="currentColor"></path>
+          </svg>
+        </span>
+      </button>`;
+    }
+    function buildPlotExportButtons(targetId, filenameBase, exportTitle = "") {
+      return `<div class="chart-action-group">${buildPlotExportMenu(targetId, filenameBase, exportTitle)}</div>`;
+    }
+    function buildPlotChartActionButtons(targetId, filenameBase, exportTitle = "", includeTable = false) {
+      return `<div class="chart-action-group">
+        ${includeTable ? buildPlotTableButton(targetId) : ""}
+        ${buildPlotExportMenu(targetId, filenameBase, exportTitle)}
+      </div>`;
+    }
+    function registerChartTableConfig(targetId, config) {
+      if (!targetId || !config) return;
+      renderState.chartTableRegistry[targetId] = config;
     }
     function sanitizeRecordsForShared(records) {
       return records.map((record, index) => {
         const normalized = normalizeLoadedRecord(record, index);
         return {
           student_key: normalized.student_key || `S${String(index + 1).padStart(5, "0")}`,
-          school_name: normalized.school_name,
           academic_year: normalized.academic_year,
           school_location: normalized.school_location,
           is_rural: normalized.is_rural,
@@ -3586,8 +3619,153 @@ body.protected-export-locked {
 })();
 `;
     }
+    function buildReportTabLabel(tabName = "") {
+      if (tabName === "summary") return "전체데이터요약";
+      if (tabName === "univ") return "대학별조회";
+      if (tabName === "dept") return "학과별조회";
+      if (tabName === "subtype") return "전형세부유형별조회";
+      if (tabName === "trend") return "지원경향조회";
+      return "현재페이지";
+    }
+    function buildActivePageFilenameSuggestion() {
+      const uiState = getCurrentReportUiState();
+      const activeTab = uiState.activeTab || "summary";
+      const records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
+
+      if (activeTab === "univ") {
+        if (uiState.univAnalytics && uiState.univAnalytics.active) {
+          const selection = Array.isArray(uiState.univAnalytics.entries) && uiState.univAnalytics.entries.length
+            ? uiState.univAnalytics.entries
+            : (uiState.univAnalytics.univ || "");
+          const entries = normalizeUnivAnalyticsEntries(selection, records);
+          if (entries.length) return formatUnivSelectionSummary(entries);
+        }
+        const selectedEntries = getSelectedUnivEntries(makeUnivFinderEntries(records));
+        if (selectedEntries.length) return formatUnivSelectionSummary(selectedEntries);
+        if (uiState.univFinderQuery) return uiState.univFinderQuery;
+        return buildReportTabLabel(activeTab);
+      }
+
+      if (activeTab === "dept") {
+        if (uiState.deptAnalytics && uiState.deptAnalytics.active && Array.isArray(uiState.deptAnalytics.entries) && uiState.deptAnalytics.entries.length) {
+          return formatDeptSelectionSummary(uiState.deptAnalytics.entries);
+        }
+        const selectedEntries = getSelectedDeptEntries(makeDeptFinderEntries(records, getDeptFinderGroupingMode()));
+        if (selectedEntries.length) return formatDeptSelectionSummary(selectedEntries);
+        if (uiState.deptFinderQuery) return uiState.deptFinderQuery;
+        return buildReportTabLabel(activeTab);
+      }
+
+      if (activeTab === "subtype") {
+        if (uiState.subtypeAnalytics && uiState.subtypeAnalytics.active) {
+          const entries = normalizeSubtypeAnalyticsEntries(uiState.subtypeAnalytics.entries || [], records);
+          if (entries.length) return formatSubtypeSelectionSummary(entries);
+        }
+        const selectedEntries = getSelectedSubtypeEntries(makeSubtypeFinderEntries(records));
+        if (selectedEntries.length) return formatSubtypeSelectionSummary(selectedEntries);
+        if (uiState.subtypeFinderQuery) return uiState.subtypeFinderQuery;
+        return buildReportTabLabel(activeTab);
+      }
+
+      return buildReportTabLabel(activeTab);
+    }
+    function collectStudentKeysFromRecords(records = []) {
+      const keySet = new Set();
+      records.forEach((record) => {
+        const studentKey = getStudentRecordKey(record);
+        if (studentKey) keySet.add(studentKey);
+      });
+      return keySet;
+    }
+    function selectStudentMapEntries(sourceMap, keySet) {
+      const nextMap = new Map();
+      if (!(sourceMap instanceof Map) || !(keySet instanceof Set) || !keySet.size) return nextMap;
+      keySet.forEach((key) => {
+        if (sourceMap.has(key)) nextMap.set(key, sourceMap.get(key));
+      });
+      return nextMap;
+    }
+    function serializeStudentCsatMapForRecords(records = []) {
+      const keySet = collectStudentKeysFromRecords(records);
+      return serializeStudentCsatMap(selectStudentMapEntries(dataState.studentCsatByKey, keySet));
+    }
+    function serializeSubjectGradeMapForRecords(records = []) {
+      const keySet = collectStudentKeysFromRecords(records);
+      return serializeSubjectGradeMap(selectStudentMapEntries(dataState.studentSubjectGradeByKey, keySet));
+    }
+    function buildFullSharedExportContext() {
+      const uiState = JSON.parse(JSON.stringify(getCurrentReportUiState()));
+      const records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
+      return {
+        records,
+        uiState,
+        studentCsatData: serializeStudentCsatMapForRecords(records),
+        subjectGradeData: serializeSubjectGradeMapForRecords(records),
+        filenameBase: "수시입시결과_공유용",
+      };
+    }
+    function buildActivePageSharedExportContext() {
+      const uiState = JSON.parse(JSON.stringify(getCurrentReportUiState()));
+      const activeTab = uiState.activeTab || "summary";
+      let records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
+
+      if (activeTab !== "univ") uiState.univAnalytics = { active: false, entries: [], univ: "" };
+      if (activeTab !== "dept") uiState.deptAnalytics = { active: false, entries: [] };
+      if (activeTab !== "subtype") uiState.subtypeAnalytics = { active: false, entries: [] };
+      uiState.singleTabExport = { activeTab };
+
+      if (activeTab === "univ" && uiState.univAnalytics && uiState.univAnalytics.active) {
+        const univSelection = Array.isArray(uiState.univAnalytics.entries) && uiState.univAnalytics.entries.length
+          ? uiState.univAnalytics.entries
+          : (uiState.univAnalytics.univ || "");
+        const entries = normalizeUnivAnalyticsEntries(univSelection, records);
+        if (entries.length) {
+          const selectedUnivs = new Set(entries.map((entry) => entry.univ));
+          records = records.filter((record) => selectedUnivs.has(record.univ || "미상"));
+          uiState.univFinderSelection = entries.map((entry) => entry.key);
+        } else {
+          uiState.univAnalytics = { active: false, entries: [], univ: "" };
+        }
+      }
+
+      if (activeTab === "dept" && uiState.deptAnalytics && uiState.deptAnalytics.active) {
+        const entries = Array.isArray(uiState.deptAnalytics.entries) ? uiState.deptAnalytics.entries : [];
+        if (entries.length) {
+          const keySet = new Set(entries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
+          records = records.filter((record) => keySet.has(buildDeptFinderKey(record.univ, record.dept)));
+        } else {
+          uiState.deptAnalytics = { active: false, entries: [] };
+        }
+      }
+
+      if (activeTab === "subtype" && uiState.subtypeAnalytics && uiState.subtypeAnalytics.active) {
+        const entries = normalizeSubtypeAnalyticsEntries(uiState.subtypeAnalytics.entries || [], records);
+        if (entries.length) {
+          const keySet = new Set(entries.flatMap((entry) => getSubtypeFinderEntryMatchKeys(entry)));
+          records = records.filter((record) => keySet.has(buildSubtypeFinderRecordKey(record.apptype, record.subtype)));
+          uiState.subtypeAnalytics = { active: true, entries: entries.map((entry) => ({ key: entry.key, subtype: entry.subtype })) };
+          uiState.subtypeFinderSelection = entries.map((entry) => entry.key);
+        } else {
+          uiState.subtypeAnalytics = { active: false, entries: [] };
+        }
+      }
+
+      return {
+        records,
+        uiState,
+        studentCsatData: serializeStudentCsatMapForRecords(records),
+        subjectGradeData: serializeSubjectGradeMapForRecords(records),
+        filenameBase: `수시입시결과_${buildReportTabLabel(activeTab)}_현재페이지`,
+      };
+    }
     async function buildSharedHtmlDocument(records, uiState = {}, options = {}) {
       const password = typeof options.password === "string" ? options.password : "";
+      const studentCsatData = options.studentCsatData && typeof options.studentCsatData === "object"
+        ? options.studentCsatData
+        : serializeStudentCsatMapForRecords(records);
+      const subjectGradeData = options.subjectGradeData && typeof options.subjectGradeData === "object"
+        ? options.subjectGradeData
+        : serializeSubjectGradeMapForRecords(records);
       const parser = new DOMParser();
       const sourceHtml = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
       const doc = parser.parseFromString(sourceHtml, "text/html");
@@ -3623,8 +3801,8 @@ body.protected-export-locked {
       if (password) {
         const encryptedPayload = await encryptExportPayload(password, {
           analysisData: sanitizeRecordsForShared(records),
-          studentCsatData: serializeStudentCsatMap(dataState.studentCsatByKey),
-          subjectGradeData: serializeSubjectGradeMap(dataState.studentSubjectGradeByKey),
+          studentCsatData,
+          subjectGradeData,
           uiState,
         });
         preloadScript.textContent = escapeInlineScriptContent(buildProtectedHtmlBootstrap(encryptedPayload));
@@ -3633,8 +3811,8 @@ body.protected-export-locked {
           `window.APP_BUILD_UTC = ${serializeForInlineScript(new Date().toISOString())};`,
           "window.PRELOADED_SHARED = true;",
           `window.PRELOADED_DATA = ${serializeForInlineScript(sanitizeRecordsForShared(records))};`,
-          `window.PRELOADED_STUDENT_CSAT = ${serializeForInlineScript(serializeStudentCsatMap(dataState.studentCsatByKey))};`,
-          `window.PRELOADED_SUBJECT_GRADE = ${serializeForInlineScript(serializeSubjectGradeMap(dataState.studentSubjectGradeByKey))};`,
+          `window.PRELOADED_STUDENT_CSAT = ${serializeForInlineScript(studentCsatData)};`,
+          `window.PRELOADED_SUBJECT_GRADE = ${serializeForInlineScript(subjectGradeData)};`,
           `window.PRELOADED_UI_STATE = ${serializeForInlineScript(uiState)};`,
         ].join("\n");
       }
@@ -3652,12 +3830,20 @@ body.protected-export-locked {
         throw new Error("먼저 보고서를 생성해주세요.");
       }
       const password = typeof options.password === "string" ? options.password : "";
-      const htmlContent = await buildSharedHtmlDocument(dataState.reportRecords, getCurrentReportUiState(), { password });
+      const exportContext = options.scope === "activePage"
+        ? buildActivePageSharedExportContext()
+        : buildFullSharedExportContext();
+      const htmlContent = await buildSharedHtmlDocument(exportContext.records, exportContext.uiState, {
+        password,
+        studentCsatData: exportContext.studentCsatData,
+        subjectGradeData: exportContext.subjectGradeData,
+      });
+      const filenameBase = safe(options.filenameBase) || exportContext.filenameBase || "수시입시결과_공유용";
       const blob = new Blob(["\uFEFF", htmlContent], { type: "text/html;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `수시입시결과_공유용_${buildExportTimestamp()}.html`;
+      link.download = `${sanitizeFilenamePart(filenameBase)}_${buildExportTimestamp()}.html`;
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
@@ -3665,14 +3851,21 @@ body.protected-export-locked {
         URL.revokeObjectURL(url);
       }, 0);
     }
-    function showSharedExportOptionsModal() {
+    function showSharedExportOptionsModal(options = {}) {
+      const title = options.title || "공유용 HTML 저장";
+      const description = options.description || "열기 암호를 설정하면 저장 파일을 열 때 먼저 암호를 입력해야 합니다. 비워두면 기존처럼 암호 없이 저장됩니다.";
+      const confirmLabel = options.confirmLabel || "HTML 다운로드";
+      const scope = options.scope === "activePage" ? "activePage" : "full";
+      const defaultFilename = safe(options.defaultFilename) || (scope === "activePage" ? buildActivePageFilenameSuggestion() : "수시입시결과_공유용");
       const modal = document.createElement("div");
       modal.id = "shared-export-modal";
       modal.innerHTML = `
         <div style="position:fixed; inset:0; z-index:21000; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(15,23,42,0.42); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);">
           <div style="width:min(100%, 440px); background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.18); padding:24px;">
-            <div style="font-size:18px; font-weight:700; color:#111827; margin-bottom:8px;">공유용 HTML 저장</div>
-            <div style="font-size:13px; line-height:1.6; color:#6b7280; margin-bottom:16px;">열기 암호를 설정하면 저장 파일을 열 때 먼저 암호를 입력해야 합니다. 비워두면 기존처럼 암호 없이 저장됩니다.</div>
+            <div style="font-size:18px; font-weight:700; color:#111827; margin-bottom:8px;">${escapeHtml(title)}</div>
+            <div style="font-size:13px; line-height:1.6; color:#6b7280; margin-bottom:16px;">${escapeHtml(description)}</div>
+            <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportFilename">파일명</label>
+            <input id="sharedExportFilename" type="text" value="${escapeHtml(defaultFilename)}" placeholder="파일명을 입력하세요" autocomplete="off" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:11px 12px; font:inherit; margin-bottom:12px;">
             <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportPassword">열기 암호</label>
             <input id="sharedExportPassword" type="password" placeholder="선택 입력" autocomplete="new-password" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:11px 12px; font:inherit; margin-bottom:12px;">
             <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportPasswordConfirm">암호 확인</label>
@@ -3680,13 +3873,14 @@ body.protected-export-locked {
             <div id="sharedExportOptionsError" style="min-height:18px; font-size:12px; color:#b91c1c; margin-top:10px;"></div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
               <button type="button" id="cancelSharedExport" style="border:1px solid #d1d5db; background:#fff; color:#374151; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">취소</button>
-              <button type="button" id="confirmSharedExport" style="border:1px solid #111827; background:#111827; color:#fff; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">HTML 다운로드</button>
+              <button type="button" id="confirmSharedExport" style="border:1px solid #111827; background:#111827; color:#fff; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">${escapeHtml(confirmLabel)}</button>
             </div>
           </div>
         </div>
       `;
       document.body.appendChild(modal);
 
+      const filenameInput = document.getElementById("sharedExportFilename");
       const passwordInput = document.getElementById("sharedExportPassword");
       const confirmInput = document.getElementById("sharedExportPasswordConfirm");
       const errorDiv = document.getElementById("sharedExportOptionsError");
@@ -3694,15 +3888,21 @@ body.protected-export-locked {
 
       document.getElementById("cancelSharedExport").addEventListener("click", closeModal);
       document.getElementById("confirmSharedExport").addEventListener("click", async () => {
+        const filenameBase = filenameInput ? filenameInput.value : "";
         const password = passwordInput ? passwordInput.value : "";
         const passwordConfirm = confirmInput ? confirmInput.value : "";
+        if (!safe(filenameBase)) {
+          if (errorDiv) errorDiv.textContent = "파일명을 입력해주세요.";
+          if (filenameInput) filenameInput.focus();
+          return;
+        }
         if ((password || passwordConfirm) && password !== passwordConfirm) {
           if (errorDiv) errorDiv.textContent = "암호와 확인 입력이 일치하지 않습니다.";
           if (confirmInput) confirmInput.focus();
           return;
         }
         try {
-          await downloadSharedHtml({ password });
+          await downloadSharedHtml({ password, scope, filenameBase });
           closeModal();
         } catch (error) {
           console.error(error);
@@ -3712,14 +3912,33 @@ body.protected-export-locked {
       modal.addEventListener("click", (event) => {
         if (event.target === modal.firstElementChild) closeModal();
       });
-      if (passwordInput) {
-        setTimeout(() => passwordInput.focus(), 0);
+      if (filenameInput) {
+        setTimeout(() => {
+          filenameInput.focus();
+          filenameInput.select();
+        }, 0);
       }
     }
     function bindSharedExportButton() {
       const exportBtn = document.getElementById("export-shared-html-btn");
-      if (!exportBtn) return;
-      exportBtn.onclick = () => showSharedExportOptionsModal();
+      const activePageBtn = document.getElementById("export-active-page-html-btn");
+      if (exportBtn) {
+        exportBtn.onclick = () => showSharedExportOptionsModal({
+          title: "공유용 HTML 저장",
+          description: "현재 필터 결과 전체와 현재 UI 상태를 저장합니다. 열기 암호를 설정하면 저장 파일을 열 때 먼저 암호를 입력해야 합니다.",
+          confirmLabel: "전체 HTML 다운로드",
+          scope: "full",
+        });
+      }
+      if (activePageBtn) {
+        activePageBtn.onclick = () => showSharedExportOptionsModal({
+          title: "현재 페이지 HTML 저장",
+          description: "현재 활성 탭만 저장합니다. 대학·학과·세부유형 상세 화면이면 현재 선택 범위만 포함하고, 리스트 화면이면 현재 필터와 검색 상태를 그대로 담습니다.",
+          confirmLabel: "현재 페이지 다운로드",
+          defaultFilename: buildActivePageFilenameSuggestion(),
+          scope: "activePage",
+        });
+      }
     }
 
     function sortedSet(setObj) {
@@ -3767,6 +3986,7 @@ body.protected-export-locked {
     function resetReportRuntimeState(records, options = {}) {
       renderState.plotRegistryData = {};
       renderState.initializedPlots = {};
+      renderState.chartTableRegistry = {};
       dataState.detailViewRowsCache = new Map();
       filterState.gradeBandModesByPlot = options.gradeBandModes && typeof options.gradeBandModes === "object"
         ? { ...options.gradeBandModes }
@@ -3786,6 +4006,11 @@ body.protected-export-locked {
         if (typeof key !== "string") return key;
         if (key.startsWith("dept::") || key.startsWith("univ::")) return key;
         return `univ::${key}`;
+      });
+      const savedSubtypeSelection = Array.isArray(options.subtypeFinderSelection) ? [...options.subtypeFinderSelection] : [];
+      filterState.selectedSubtypeKeys = savedSubtypeSelection.map((key) => {
+        if (typeof key !== "string") return key;
+        return key.startsWith("subtype::") ? key : `subtype::${key}`;
       });
       dataState.reportRecords = records;
     }
@@ -3855,6 +4080,7 @@ body.protected-export-locked {
               <div class="site-title">2026 강원진학센터 입시분석팀</div>
               <div class="header-actions">
                 <button type="button" class="header-action-btn" id="export-shared-html-btn">공유용 HTML 저장</button>
+                <button type="button" class="header-action-btn" id="export-active-page-html-btn">현재 페이지 HTML 저장</button>
               </div>
             </div>
           <h2 class="university-title">수시 입시 결과 분석 프로그램</h2>
@@ -3888,12 +4114,14 @@ body.protected-export-locked {
                 <button type="button" class="tab-btn ${activeTab === "summary" ? "active" : ""}" data-tab="summary">전체데이터요약</button>
                 <button type="button" class="tab-btn ${activeTab === "univ" ? "active" : ""}" data-tab="univ">대학별조회</button>
                 <button type="button" class="tab-btn ${activeTab === "dept" ? "active" : ""}" data-tab="dept">학과별조회</button>
+                <button type="button" class="tab-btn ${activeTab === "subtype" ? "active" : ""}" data-tab="subtype">전형 세부유형별 조회</button>
                 <button type="button" class="tab-btn ${activeTab === "trend" ? "active" : ""}" data-tab="trend">지원경향조회</button>
               </div>
             </div>
             <section id="tab-summary" class="tab-panel ${activeTab === "summary" ? "active" : ""}"></section>
             <section id="tab-univ" class="tab-panel ${activeTab === "univ" ? "active" : ""}"></section>
             <section id="tab-dept" class="tab-panel ${activeTab === "dept" ? "active" : ""}"></section>
+            <section id="tab-subtype" class="tab-panel ${activeTab === "subtype" ? "active" : ""}"></section>
             <section id="tab-trend" class="tab-panel ${activeTab === "trend" ? "active" : ""}"></section>
           </main>
         </div>`;
@@ -3904,7 +4132,11 @@ body.protected-export-locked {
       const summaryEl = document.getElementById("tab-summary");
       const univEl = document.getElementById("tab-univ");
       const deptEl = document.getElementById("tab-dept");
+      const subtypeEl = document.getElementById("tab-subtype");
       const trendEl = document.getElementById("tab-trend");
+      const univSearchQuery = typeof options.univFinderQuery === "string" ? options.univFinderQuery : "";
+      const deptSearchQuery = typeof options.deptFinderQuery === "string" ? options.deptFinderQuery : "";
+      const subtypeSearchQuery = typeof options.subtypeFinderQuery === "string" ? options.subtypeFinderQuery : "";
       let plotCounter = 1;
 
       const yearInfo = years.length > 0 ? `학년도 ${years.length} · ` : "";
@@ -4003,6 +4235,8 @@ body.protected-export-locked {
           </div>
           <div id="univ-analytics-content"></div>
         </div>`;
+      const univSearchInput = document.getElementById("univ-directory-search");
+      if (univSearchInput && univSearchQuery) univSearchInput.value = univSearchQuery;
 
       deptEl.innerHTML = `<div id="dept-list-view"><div class="dept-container">
           <div class="dept-header">학과별 조회</div>
@@ -4050,6 +4284,48 @@ body.protected-export-locked {
           </div>
           <div id="dept-analytics-content"></div>
         </div>`;
+      const deptSearchInput = document.getElementById("dept-finder-search");
+      if (deptSearchInput && deptSearchQuery) deptSearchInput.value = deptSearchQuery;
+
+      subtypeEl.innerHTML = `<div id="subtype-list-view"><div class="dept-container">
+          <div class="dept-header">전형 세부유형별 조회</div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-head-copy">
+                <h3>세부유형 검색</h3>
+                <div class="card-note">같은 <span class="card-note-emphasis">세부유형명</span>은 전형유형을 통합해 보여주며, 검색 후 바로 아래 선택 영역에서 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다.</div>
+              </div>
+            </div>
+            <div class="directory-search">
+              <label for="subtype-finder-search">세부유형명 검색</label>
+              <input type="search" id="subtype-finder-search" placeholder="예: 일반전형, 지역인재, 학교추천" />
+            </div>
+            <div class="dept-finder-selection-panel">
+              <div class="dept-finder-selection-head">
+                <div class="dept-finder-selection-copy">
+                  <div class="dept-finder-selection-label">선택한 세부유형</div>
+                  <div class="dept-finder-selection-meta" id="subtype-finder-selection-meta">아직 선택한 세부유형이 없습니다.</div>
+                </div>
+                <div class="dept-finder-actions">
+                  <button type="button" class="primary" id="subtype-finder-open-btn" disabled>상세보기</button>
+                  <button type="button" id="subtype-finder-clear-btn" disabled>선택 비우기</button>
+                </div>
+              </div>
+              <div id="subtype-finder-selected"></div>
+            </div>
+            <div id="subtype-finder-results"></div>
+            <div class="dept-finder-hint" id="subtype-finder-hint">세부유형명을 입력하면 같은 이름은 전형유형을 통합해 보여줍니다. 이미 선택한 세부유형은 위 칩에서 관리할 수 있습니다.</div>
+          </div>
+        </div></div>
+        <div id="subtype-analytics-view" hidden>
+          <div class="analytics-back-bar">
+            <button type="button" class="analytics-back-btn" id="subtype-analytics-back">\u2190 목록</button>
+            <div><div class="analytics-view-title" id="subtype-analytics-title"></div><div class="analytics-view-subtitle" id="subtype-analytics-subtitle"></div></div>
+          </div>
+          <div id="subtype-analytics-content"></div>
+        </div>`;
+      const subtypeSearchInput = document.getElementById("subtype-finder-search");
+      if (subtypeSearchInput && subtypeSearchQuery) subtypeSearchInput.value = subtypeSearchQuery;
 
 	      trendEl.innerHTML = `<div class="trend-wide-shell">
 	          <div class="dept-container">
@@ -4081,8 +4357,11 @@ body.protected-export-locked {
       renderUnivDirectory(records);
       bindDeptFinderControls(records);
       renderDeptFinder(records);
+      bindSubtypeFinderControls(records);
+      renderSubtypeFinder(records);
       renderStudentTrend(records);
       bindPlotExportButtons(reportEl);
+      bindPlotTableButtons(reportEl);
       bindYearFilter(metaYears, metaAllRecords);
       bindLocationFilter(metaYears, metaAllRecords);
       initLazyRendering(records, metaAllRecords, metaYears);
@@ -4090,6 +4369,7 @@ body.protected-export-locked {
       // 분석 뷰 뒤로가기 바인딩
       document.getElementById("univ-analytics-back")?.addEventListener("click", hideUnivAnalytics);
       document.getElementById("dept-analytics-back")?.addEventListener("click", hideDeptAnalytics);
+      document.getElementById("subtype-analytics-back")?.addEventListener("click", hideSubtypeAnalytics);
 
       // 글로벌 필터 재렌더 시 분석 뷰 상태 복원
       if (options.univAnalytics && options.univAnalytics.active) {
@@ -4100,6 +4380,9 @@ body.protected-export-locked {
       }
       if (options.deptAnalytics && options.deptAnalytics.active) {
         showDeptAnalytics(options.deptAnalytics.entries, records, metaAllRecords, metaYears);
+      }
+      if (options.subtypeAnalytics && options.subtypeAnalytics.active) {
+        showSubtypeAnalytics(options.subtypeAnalytics.entries, records, metaAllRecords, metaYears);
       }
     }
 
@@ -4349,6 +4632,27 @@ body.protected-export-locked {
       });
     }
 
+    function restrictReportToSingleTab(tabName) {
+      if (!tabName) return;
+      const tabBar = document.getElementById("report-tabs");
+      if (tabBar) {
+        tabBar.querySelectorAll(".tab-btn").forEach((btn) => {
+          if (btn.dataset.tab !== tabName) btn.remove();
+        });
+      }
+      document.querySelectorAll(".tab-panel").forEach((panel) => {
+        if (panel.id !== `tab-${tabName}`) {
+          panel.remove();
+          return;
+        }
+        panel.classList.add("active");
+      });
+      updateStickyTabOffset();
+      requestAnimationFrame(() => {
+        updateVisiblePlots();
+      });
+    }
+
     function buildUniversityDetailSection(univ, index, startPlotId) {
       let plotCounter = startPlotId;
       let html = `<div class="dept-container"><div class="dept-header">${univ}</div>`;
@@ -4462,6 +4766,14 @@ body.protected-export-locked {
       if (includeBands) {
         const currentBandMode = filterState.gradeBandModesByPlot[plotId] || DEFAULT_GRADE_BAND_MODE;
         filterState.gradeBandModesByPlot[plotId] = currentBandMode;
+        const bandTargetId = `band-bar-${plotId}`;
+        registerChartTableConfig(bandTargetId, createGradeBandSummaryTableConfig(dataArr, {
+          key: "all_subj_grade",
+          title: "전교과 등급대별 지원 건수 및 합격률 표",
+          subtitle: [title, `총 ${dataArr.length.toLocaleString()}건`, formatAcademicYearScope(dataArr)].filter(Boolean).join(" · "),
+          filenameBase: buildChartExportFilenameBase("전교과등급대별_지원건수_합격률_표", dataArr, title),
+          sheetName: "등급대집계표",
+        }));
         bandHtml += `<div class="section-spacer">
             <div class="card">
               <div class="card-head">
@@ -4470,10 +4782,11 @@ body.protected-export-locked {
                   <div class="card-note" id="band-note-${plotId}">등급 미기재 제외 0건</div>
                 </div>
                 <div class="card-head-actions">
-                  ${buildPlotExportButtons(
-                    `band-bar-${plotId}`,
+                  ${buildPlotChartActionButtons(
+                    bandTargetId,
                     buildChartExportFilenameBase("전교과등급대별_지원건수_합격률", dataArr),
-                    buildChartExportTitle("전교과 등급대별 지원 건수 및 합격률", dataArr)
+                    buildChartExportTitle("전교과 등급대별 지원 건수 및 합격률", dataArr),
+                    true
                   )}
                   <div class="segmented-control" data-band-mode-group="${plotId}" aria-label="충원합격 표시 방식">
                     <button type="button" class="segmented-btn${currentBandMode === "separate" ? " active" : ""}" data-band-mode="separate" aria-pressed="${currentBandMode === "separate"}">충원 분리</button>
@@ -4481,7 +4794,7 @@ body.protected-export-locked {
                   </div>
                 </div>
               </div>
-              <div id="band-bar-${plotId}" class="plot-container h-320"></div>
+              <div id="${bandTargetId}" class="plot-container h-320"></div>
             </div>
           </div>`;
       }
@@ -4542,10 +4855,8 @@ body.protected-export-locked {
 
     function createPlotDataFromGrouped(groupedByResult) {
       const studentLabel = (r) => {
-        const s = r.school_name || "";
         const y = r.academic_year || "";
-        if (s && y) return `${s} (${y})`;
-        return s || (y ? `${y}학년도` : "학생 지원 데이터");
+        return y ? `${y}학년도 지원 데이터` : "학생 지원 데이터";
       };
 
       const allTraces = RESULT_ORDER.map((res) => {
@@ -5108,6 +5419,23 @@ body.protected-export-locked {
       document.addEventListener("keydown", handleChartExportMenuDocumentKeydown);
     }
 
+    function bindPlotTableButtons(root = document) {
+      if (!root || typeof root.querySelectorAll !== "function") return;
+      root.querySelectorAll("[data-plot-table-target]").forEach((btn) => {
+        btn.onclick = (event) => {
+          event.stopPropagation();
+          closeChartExportMenus(document);
+          const targetId = btn.getAttribute("data-plot-table-target") || "";
+          const config = targetId ? renderState.chartTableRegistry[targetId] : null;
+          if (!config) {
+            window.alert("표 데이터를 불러오지 못했습니다.");
+            return;
+          }
+          openSummaryTableModal(config);
+        };
+      });
+    }
+
     function handleChartExportMenuDocumentClick(event) {
       if (event.target instanceof Element && event.target.closest("[data-chart-export-menu]")) return;
       closeChartExportMenus(document);
@@ -5121,6 +5449,7 @@ body.protected-export-locked {
     /* ── Analytics sub-view helpers ── */
     const ANALYTICS_UNIV_PLOT_BASE = 9000;
     const ANALYTICS_DEPT_PLOT_BASE = 9500;
+    const ANALYTICS_SUBTYPE_PLOT_BASE = 9800;
 
     function cleanupAnalyticsPlots(rootEl) {
       if (!rootEl) return;
@@ -5192,6 +5521,72 @@ body.protected-export-locked {
 
     function buildGradeBandHoverTemplate(traceLabel) {
       return `<b>%{x}</b><br>총 건수: %{customdata[0]}건<br>합격: %{customdata[1]}건<br>충원합격: %{customdata[2]}건<br>불합격: %{customdata[3]}건<br>최초합격률: %{customdata[4]:.1f}%<br>충원포함 합격률: %{customdata[5]:.1f}%<extra>${traceLabel}</extra>`;
+    }
+
+    function formatPercentageText(value, total = 0) {
+      return total ? `${Number(value).toFixed(1)}%` : "-";
+    }
+
+    function createGradeBandSummaryTableConfig(records, options = {}) {
+      const key = options.key || "all_subj_grade";
+      const { stats, excludedCount } = makeGradeBandStats(records, key);
+      const yearScope = formatAcademicYearScope(records);
+      const analyzedCount = Math.max(0, records.length - excludedCount);
+      const subtitleParts = options.subtitle
+        ? [options.subtitle]
+        : [
+            options.contextLabel || "",
+            `총 ${records.length.toLocaleString()}건`,
+            yearScope,
+          ];
+      const metaParts = [
+        `등급 기재 ${analyzedCount.toLocaleString()}건`,
+        `등급 미기재 제외 ${excludedCount.toLocaleString()}건`,
+        `표본 적음 기준 ${GRADE_BAND_LOW_SAMPLE_THRESHOLD}건 미만`,
+      ];
+      const columns = [
+        { key: "band", header: "등급대", width: "108px", align: "center" },
+        { key: "total", header: "지원건수", width: "94px", align: "right" },
+        { key: "pass", header: "합격", width: "82px", align: "right" },
+        { key: "wait", header: "충원합격", width: "96px", align: "right" },
+        { key: "fail", header: "불합격", width: "82px", align: "right" },
+        { key: "firstPassRate", header: "최초합격률", width: "98px", align: "right" },
+        { key: "allPassRate", header: "충원포함 합격률", width: "122px", align: "right" },
+        { key: "sampleNote", header: "비고", width: "96px", align: "center" },
+      ];
+      const rows = stats.map((item) => ({
+        band: item.label,
+        total: item.total.toLocaleString(),
+        pass: item.pass.toLocaleString(),
+        wait: item.wait.toLocaleString(),
+        fail: item.fail.toLocaleString(),
+        firstPassRate: formatPercentageText(item.firstPassRate, item.total),
+        allPassRate: formatPercentageText(item.allPassRate, item.total),
+        sampleNote: item.isLowSample ? "표본 적음" : "",
+      }));
+      const exportRows = stats.map((item) => ({
+        "등급대": item.label,
+        "지원건수": item.total,
+        "합격": item.pass,
+        "충원합격": item.wait,
+        "불합격": item.fail,
+        "최초합격률": formatPercentageText(item.firstPassRate, item.total),
+        "충원포함 합격률": formatPercentageText(item.allPassRate, item.total),
+        "비고": item.isLowSample ? "표본 적음" : "",
+      }));
+      return {
+        type: "summaryTable",
+        title: options.title || "등급대 집계표",
+        subtitle: subtitleParts.filter(Boolean).join(" · "),
+        metaText: metaParts.join(" · "),
+        columns,
+        rows,
+        exportRows,
+        exportOptions: {
+          sheetName: options.sheetName || "등급대집계표",
+          filenameBase: options.filenameBase || "등급대집계표",
+        },
+      };
     }
 
     function makeGradeBandStats(records, key) {
@@ -5767,6 +6162,7 @@ body.protected-export-locked {
       bindGradeBandModeTogglesScoped(contentEl, univRecords);
       bindApptypeBandModeTogglesScoped(contentEl, univRecords);
       bindPlotExportButtons(contentEl);
+      bindPlotTableButtons(contentEl);
 
       analyticsView.scrollIntoView({ behavior: "instant" });
     }
@@ -5855,6 +6251,7 @@ body.protected-export-locked {
       bindGradeBandModeTogglesScoped(contentEl, deptRecords);
       bindApptypeBandModeTogglesScoped(contentEl, deptRecords);
       bindPlotExportButtons(contentEl);
+      bindPlotTableButtons(contentEl);
 
       analyticsView.scrollIntoView({ behavior: "instant" });
     }
@@ -6197,6 +6594,368 @@ body.protected-export-locked {
       }
     }
 
+    function buildSubtypeFinderRecordKey(apptype, subtype) {
+      return `${apptype || "미상"}|||${subtype || "미상"}`;
+    }
+
+    function buildSubtypeFinderEntryKey(subtype) {
+      return `subtype::${subtype || "미상"}`;
+    }
+
+    function getSubtypeFinderEntryMatchKeys(entry) {
+      if (entry && Array.isArray(entry.matchKeys) && entry.matchKeys.length) return entry.matchKeys;
+      if (entry && entry.apptype !== undefined && entry.subtype !== undefined) {
+        return [buildSubtypeFinderRecordKey(entry.apptype, entry.subtype)];
+      }
+      return [];
+    }
+
+    function buildSubtypeFinderApptypeSummary(entry) {
+      const primaryApptype = entry && (entry.primaryApptype || entry.apptype) ? (entry.primaryApptype || entry.apptype) : "미상";
+      const apptypeCount = entry && Number.isFinite(entry.apptypeCount) ? entry.apptypeCount : (entry && entry.apptype ? 1 : 0);
+      if (apptypeCount > 1) return `${primaryApptype} 외 ${apptypeCount - 1}개 전형유형`;
+      return primaryApptype;
+    }
+
+    function buildSubtypeFinderLabel(entry) {
+      return entry && entry.subtype ? entry.subtype : "미상";
+    }
+
+    function buildSubtypeFinderSubtitle(entry) {
+      return `${buildSubtypeFinderApptypeSummary(entry)} ${entry.total.toLocaleString()}건`;
+    }
+
+    function buildSubtypeFinderAnalyticsTitle(entry) {
+      return buildSubtypeFinderLabel(entry);
+    }
+
+    function makeSubtypeFinderEntries(records) {
+      const grouped = {};
+      records.forEach((r) => {
+        const apptype = r.apptype || "미상";
+        const subtype = r.subtype || "미상";
+        const recordKey = buildSubtypeFinderRecordKey(apptype, subtype);
+        const key = buildSubtypeFinderEntryKey(subtype);
+        if (!grouped[key]) {
+          grouped[key] = {
+            key,
+            subtype,
+            total: 0,
+            matchKeySet: new Set(),
+            apptypeTotals: {},
+          };
+        }
+        grouped[key].total += 1;
+        grouped[key].matchKeySet.add(recordKey);
+        grouped[key].apptypeTotals[apptype] = (grouped[key].apptypeTotals[apptype] || 0) + 1;
+      });
+
+      return Object.values(grouped).map((entry) => {
+        const apptypes = Object.keys(entry.apptypeTotals).sort((a, b) => a.localeCompare(b, "ko"));
+        const primaryApptype = apptypes.slice().sort((a, b) => {
+          const countDiff = (entry.apptypeTotals[b] || 0) - (entry.apptypeTotals[a] || 0);
+          if (countDiff !== 0) return countDiff;
+          return a.localeCompare(b, "ko");
+        })[0] || "미상";
+        return {
+          key: entry.key,
+          subtype: entry.subtype,
+          apptype: primaryApptype,
+          primaryApptype,
+          apptypeCount: apptypes.length,
+          apptypes,
+          total: entry.total,
+          matchKeys: Array.from(entry.matchKeySet),
+        };
+      }).sort((a, b) => {
+        const subtypeDiff = a.subtype.localeCompare(b.subtype, "ko");
+        if (subtypeDiff !== 0) return subtypeDiff;
+        return a.primaryApptype.localeCompare(b.primaryApptype, "ko");
+      });
+    }
+
+    function getSubtypeFinderMatches(entries, keyword) {
+      const normalized = keyword.toLowerCase();
+      return entries
+        .filter((entry) => entry.subtype.toLowerCase().includes(normalized))
+        .sort((a, b) => {
+          const aStarts = a.subtype.toLowerCase().startsWith(normalized) ? 0 : 1;
+          const bStarts = b.subtype.toLowerCase().startsWith(normalized) ? 0 : 1;
+          if (aStarts !== bStarts) return aStarts - bStarts;
+          return (b.total - a.total) || a.subtype.localeCompare(b.subtype, "ko") || a.primaryApptype.localeCompare(b.primaryApptype, "ko");
+        });
+    }
+
+    function getSelectedSubtypeEntries(entries) {
+      const selectedSet = new Set(filterState.selectedSubtypeKeys);
+      return entries.filter((entry) => selectedSet.has(entry.key));
+    }
+
+    function addSubtypeFinderSelection(keys = []) {
+      if (!Array.isArray(keys) || !keys.length) return false;
+      const nextSelection = new Set(filterState.selectedSubtypeKeys);
+      let changed = false;
+      keys.forEach((key) => {
+        if (!key || nextSelection.has(key)) return;
+        nextSelection.add(key);
+        changed = true;
+      });
+      if (changed) filterState.selectedSubtypeKeys = Array.from(nextSelection);
+      return changed;
+    }
+
+    function formatSubtypeSelectionSummary(entries) {
+      if (!entries.length) return "선택 세부유형 없음";
+      if (entries.length === 1) return buildSubtypeFinderLabel(entries[0]);
+      return `${buildSubtypeFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
+    }
+
+    function renderSubtypeFinder(records) {
+      const searchEl = document.getElementById("subtype-finder-search");
+      const resultsEl = document.getElementById("subtype-finder-results");
+      const selectedEl = document.getElementById("subtype-finder-selected");
+      const selectionMetaEl = document.getElementById("subtype-finder-selection-meta");
+      const openBtn = document.getElementById("subtype-finder-open-btn");
+      const clearBtn = document.getElementById("subtype-finder-clear-btn");
+      const hintEl = document.getElementById("subtype-finder-hint");
+      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
+
+      const entries = makeSubtypeFinderEntries(records);
+      const selectedEntries = getSelectedSubtypeEntries(entries);
+      const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
+      const keyword = safe(searchEl.value);
+
+      selectionMetaEl.textContent = selectedEntries.length
+        ? `선택 ${selectedEntries.length}개 · ${formatSubtypeSelectionSummary(selectedEntries)}`
+        : "아직 선택한 세부유형이 없습니다.";
+
+      if (!keyword) {
+        resultsEl.innerHTML = "";
+        hintEl.textContent = "세부유형명을 입력하면 같은 이름은 전형유형을 통합해 보여줍니다. 이미 선택한 세부유형은 위 칩에서 관리할 수 있습니다.";
+      } else {
+        const matches = getSubtypeFinderMatches(entries, keyword);
+        const addableMatches = matches.filter((entry) => !selectedSet.has(entry.key));
+        const visibleMatches = addableMatches.slice(0, DEPT_SEARCH_RESULT_LIMIT);
+        const hiddenSelectedCount = matches.length - addableMatches.length;
+
+        if (!matches.length) {
+          resultsEl.innerHTML = '<div class="empty">일치하는 세부유형이 없습니다.</div>';
+          hintEl.textContent = "검색어를 바꿔 다시 찾아보세요.";
+        } else if (!visibleMatches.length) {
+          resultsEl.innerHTML = '<div class="empty">검색된 세부유형이 모두 이미 선택되어 있습니다.</div>';
+          hintEl.textContent = "위 칩에서 선택을 해제하거나 검색어를 바꿔 다시 찾아보세요.";
+        } else {
+          resultsEl.innerHTML = `<div class="dept-finder-results">
+            <div class="dept-finder-results-head">
+              <div class="dept-finder-results-meta">검색 일치 ${matches.length}개 · 현재 표시 ${visibleMatches.length}개${hiddenSelectedCount ? ` · 이미 선택 ${hiddenSelectedCount}개 제외` : ""}</div>
+              <button type="button" class="dept-finder-add-all" data-subtype-add-all="true">표시 결과 모두 추가 (${visibleMatches.length})</button>
+            </div>
+            ${visibleMatches.map((entry) => `
+              <div class="dept-finder-item">
+                <div class="dept-finder-item-copy">
+                  <div class="dept-finder-item-title">${escapeHtml(entry.subtype)}</div>
+                  <div class="dept-finder-item-subtitle">${escapeHtml(buildSubtypeFinderSubtitle(entry))}</div>
+                </div>
+                <button type="button" data-subtype-add="${escapeHtml(entry.key)}">추가</button>
+              </div>
+            `).join("")}
+          </div>`;
+          if (addableMatches.length > DEPT_SEARCH_RESULT_LIMIT) {
+            hintEl.textContent = hiddenSelectedCount
+              ? `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`
+              : `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 검색어를 더 구체적으로 입력해 주세요.`;
+          } else if (hiddenSelectedCount) {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`;
+          } else {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다.`;
+          }
+        }
+      }
+
+      selectedEl.innerHTML = selectedEntries.length
+        ? `<div class="dept-finder-selected">${selectedEntries.map((entry) => `
+            <div class="dept-finder-chip">
+              <span>${escapeHtml(buildSubtypeFinderLabel(entry))}</span>
+              <button type="button" aria-label="${escapeHtml(buildSubtypeFinderLabel(entry))} 선택 해제" data-subtype-remove="${escapeHtml(entry.key)}">×</button>
+            </div>
+          `).join("")}</div>`
+        : '<div class="dept-finder-selection-empty">아직 선택한 세부유형이 없습니다. 검색 결과에서 세부유형을 추가해 주세요.</div>';
+
+      openBtn.disabled = selectedEntries.length === 0;
+      clearBtn.disabled = selectedEntries.length === 0;
+    }
+
+    function bindSubtypeFinderControls(records) {
+      const searchEl = document.getElementById("subtype-finder-search");
+      const resultsEl = document.getElementById("subtype-finder-results");
+      const selectedEl = document.getElementById("subtype-finder-selected");
+      const openBtn = document.getElementById("subtype-finder-open-btn");
+      const clearBtn = document.getElementById("subtype-finder-clear-btn");
+      if (searchEl) {
+        searchEl.addEventListener("input", () => {
+          renderSubtypeFinder(records);
+        });
+      }
+      if (resultsEl) {
+        resultsEl.addEventListener("click", (event) => {
+          const addAllTrigger = event.target instanceof Element ? event.target.closest("[data-subtype-add-all]") : null;
+          if (addAllTrigger) {
+            const searchEl = document.getElementById("subtype-finder-search");
+            const keyword = safe(searchEl ? searchEl.value : "");
+            if (!keyword) return;
+            const entries = makeSubtypeFinderEntries(records);
+            const selectedSet = new Set(filterState.selectedSubtypeKeys);
+            const matches = getSubtypeFinderMatches(entries, keyword)
+              .filter((entry) => !selectedSet.has(entry.key))
+              .slice(0, DEPT_SEARCH_RESULT_LIMIT);
+            const changed = addSubtypeFinderSelection(matches.map((entry) => entry.key));
+            if (changed) renderSubtypeFinder(records);
+            return;
+          }
+          const trigger = event.target instanceof Element ? event.target.closest("[data-subtype-add]") : null;
+          if (!trigger) return;
+          const key = trigger.getAttribute("data-subtype-add") || "";
+          if (!key) return;
+          const changed = addSubtypeFinderSelection([key]);
+          if (changed) renderSubtypeFinder(records);
+        });
+      }
+      if (selectedEl) {
+        selectedEl.addEventListener("click", (event) => {
+          const trigger = event.target instanceof Element ? event.target.closest("[data-subtype-remove]") : null;
+          if (!trigger) return;
+          const key = trigger.getAttribute("data-subtype-remove") || "";
+          if (!key) return;
+          filterState.selectedSubtypeKeys = filterState.selectedSubtypeKeys.filter((item) => item !== key);
+          renderSubtypeFinder(records);
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          filterState.selectedSubtypeKeys = [];
+          renderSubtypeFinder(records);
+        });
+      }
+      if (openBtn) {
+        openBtn.addEventListener("click", () => {
+          const selectedEntries = getSelectedSubtypeEntries(makeSubtypeFinderEntries(records));
+          if (!selectedEntries.length) return;
+          showSubtypeAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
+        });
+      }
+    }
+
+    function normalizeSubtypeAnalyticsEntries(selection, records) {
+      const entries = makeSubtypeFinderEntries(records);
+      if (Array.isArray(selection) && selection.length) {
+        const keySet = new Set(selection.map((entry) => {
+          if (entry && entry.key) return entry.key;
+          if (entry && entry.subtype) return buildSubtypeFinderEntryKey(entry.subtype);
+          return "";
+        }).filter(Boolean));
+        return entries.filter((entry) => keySet.has(entry.key));
+      }
+      if (typeof selection === "string" && selection) {
+        return entries.filter((entry) => entry.subtype === selection);
+      }
+      return [];
+    }
+
+    function showSubtypeAnalytics(selection, records, allRecords, metaYears) {
+      const listView = document.getElementById("subtype-list-view");
+      const analyticsView = document.getElementById("subtype-analytics-view");
+      const titleEl = document.getElementById("subtype-analytics-title");
+      const subtitleEl = document.getElementById("subtype-analytics-subtitle");
+      const contentEl = document.getElementById("subtype-analytics-content");
+      const entries = normalizeSubtypeAnalyticsEntries(selection, records);
+      if (!listView || !analyticsView || !contentEl || !entries.length) return;
+
+      listView.hidden = true;
+      analyticsView.hidden = false;
+      analyticsViewState.subtypeTab = {
+        active: true,
+        entries: entries.map((entry) => ({ key: entry.key, subtype: entry.subtype })),
+      };
+
+      const entryKeySet = new Set(entries.flatMap((entry) => getSubtypeFinderEntryMatchKeys(entry)));
+      const subtypeRecords = records.filter((r) => entryKeySet.has(buildSubtypeFinderRecordKey(r.apptype, r.subtype)));
+      const subtypeAllRecords = allRecords.filter((r) => entryKeySet.has(buildSubtypeFinderRecordKey(r.apptype, r.subtype)));
+      const years = metaYears || [];
+
+      if (titleEl) {
+        titleEl.textContent = entries.length === 1
+          ? buildSubtypeFinderAnalyticsTitle(entries[0])
+          : `${buildSubtypeFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
+      }
+
+      const yearScope = formatAcademicYearScope(subtypeRecords);
+      if (subtitleEl) {
+        const subtitleParts = [];
+        if (entries.length === 1) subtitleParts.push(buildSubtypeFinderApptypeSummary(entries[0]));
+        subtitleParts.push(`총 ${subtypeRecords.length}건`);
+        if (yearScope) subtitleParts.push(yearScope);
+        subtitleEl.textContent = subtitleParts.join(" · ");
+      }
+
+      cleanupAnalyticsPlots(contentEl);
+      contentEl.innerHTML = "";
+
+      let plotCounter = ANALYTICS_SUBTYPE_PLOT_BASE;
+      const block = buildPlotBlock(
+        subtypeRecords,
+        plotCounter,
+        entries.length === 1 ? buildSubtypeFinderAnalyticsTitle(entries[0]) : "선택 세부유형",
+        true, false, true, true, false, true, false, false, true
+      );
+      renderState.plotRegistryData[plotCounter] = block.data;
+      plotCounter++;
+
+      let html = `<div class="dept-container section-overall">
+        <div class="section-hint"><strong>전형별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
+        ${block.html}
+      </div>`;
+
+      if (years.length > 1) {
+        html += `<div class="dept-container section-year-comparison">
+          <div class="dept-header">연도별 비교</div>
+          <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
+            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
+          </div></div>
+            <div id="subtype-analytics-year-apptype" class="aux-container"></div>
+          </div>
+        </div>`;
+      }
+
+      contentEl.innerHTML = html;
+
+      const pid = ANALYTICS_SUBTYPE_PLOT_BASE;
+      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(subtypeRecords, "all_subj_grade", pid);
+      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(subtypeRecords, pid);
+      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(subtypeRecords, pid);
+      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(subtypeRecords, pid);
+      if (years.length > 1 && document.getElementById("subtype-analytics-year-apptype")) {
+        renderYearApptypeTrendTable(subtypeAllRecords, years, "subtype-analytics-year-apptype");
+      }
+
+      bindGradeBandModeTogglesScoped(contentEl, subtypeRecords);
+      bindApptypeBandModeTogglesScoped(contentEl, subtypeRecords);
+      bindPlotExportButtons(contentEl);
+      bindPlotTableButtons(contentEl);
+
+      analyticsView.scrollIntoView({ behavior: "instant" });
+    }
+
+    function hideSubtypeAnalytics() {
+      const listView = document.getElementById("subtype-list-view");
+      const analyticsView = document.getElementById("subtype-analytics-view");
+      const contentEl = document.getElementById("subtype-analytics-content");
+      if (listView) listView.hidden = false;
+      if (analyticsView) analyticsView.hidden = true;
+      analyticsViewState.subtypeTab = { active: false, entries: [] };
+      cleanupAnalyticsPlots(contentEl);
+      if (contentEl) contentEl.innerHTML = "";
+    }
+
     function renderGradeBands(records, key, targetPlotId, options = {}) {
       const {
         modeKey = targetPlotId,
@@ -6239,23 +6998,35 @@ body.protected-export-locked {
         hostEl.innerHTML = '<div class="empty">데이터 없음</div>';
         return;
       }
-      hostEl.innerHTML = `<div class="apptype-band-grid">${groups.map((group, index) => `
+      hostEl.innerHTML = `<div class="apptype-band-grid">${groups.map((group, index) => {
+        const targetId = `apptype-band-bar-${plotId}-${index}`;
+        registerChartTableConfig(targetId, createGradeBandSummaryTableConfig(group.subset, {
+          key: "all_subj_grade",
+          title: `${group.label} 등급대별 지원 건수 및 합격률 표`,
+          subtitle: [`전형유형 ${group.label}`, `총 ${group.subset.length.toLocaleString()}건`, formatAcademicYearScope(group.subset)].filter(Boolean).join(" · "),
+          filenameBase: buildChartExportFilenameBase("전형별_등급대별_지원건수_합격률_표", group.subset, group.label),
+          sheetName: "전형등급대집계표",
+        }));
+        return `
         <div class="apptype-band-card">
           <div class="apptype-band-card-head">
             <div class="apptype-band-card-copy">
               <h4 class="apptype-band-card-title">${escapeHtml(group.label)} · ${group.total.toLocaleString()}건${academicYearScope ? ` · ${escapeHtml(academicYearScope)}` : ""}</h4>
               <div class="card-note" id="apptype-band-note-${plotId}-${index}">등급 미기재 제외 0건</div>
             </div>
-            ${buildPlotExportButtons(
-              `apptype-band-bar-${plotId}-${index}`,
+            ${buildPlotChartActionButtons(
+              targetId,
               buildChartExportFilenameBase("전형별_등급대별_지원건수_합격률", group.subset, group.label),
-              buildChartExportTitle("전형에 따른 등급대별 지원 건수 및 합격률", group.subset, group.label)
+              buildChartExportTitle("전형에 따른 등급대별 지원 건수 및 합격률", group.subset, group.label),
+              true
             )}
           </div>
-          <div id="apptype-band-bar-${plotId}-${index}" class="plot-container h-320"></div>
+          <div id="${targetId}" class="plot-container h-320"></div>
         </div>
-      `).join("")}</div>`;
+      `;
+      }).join("")}</div>`;
       bindPlotExportButtons(hostEl);
+      bindPlotTableButtons(hostEl);
       const sharedYMax = Math.max(...groups.map((group) => getGradeBandYAxisMax(makeGradeBandStats(group.subset, "all_subj_grade").stats)), 4);
       groups.forEach((group, index) => {
         renderGradeBands(group.subset, "all_subj_grade", plotId, {
@@ -6715,8 +7486,6 @@ body.protected-export-locked {
             sortGrade: r.all_subj_grade ?? Number.POSITIVE_INFINITY,
             gradeLabel: formatModalGrade(r.all_subj_grade),
             student_key: key,
-            school_name: r.school_name || "",
-            schoolLabel: r.school_name || "-",
             apps: [],
             years: [],
           });
@@ -6746,8 +7515,6 @@ body.protected-export-locked {
       });
       return rows.sort((a, b) => {
         if (a.sortGrade !== b.sortGrade) return a.sortGrade - b.sortGrade;
-        const schoolDiff = String(a.school_name).localeCompare(String(b.school_name), "ko", { numeric: true });
-        if (schoolDiff !== 0) return schoolDiff;
         const keyDiff = String(a.student_key).localeCompare(String(b.student_key), "ko", { numeric: true });
         if (keyDiff !== 0) return keyDiff;
         return a.rowOrder - b.rowOrder;
@@ -6828,7 +7595,7 @@ body.protected-export-locked {
             </tr>
           </thead>
           <tbody>
-            ${visibleRows.map((row) => `<tr class="trend-row-clickable" data-trend-student="true" data-student-key="${escapeHtml(row.student_key || "")}" data-student-school="${escapeHtml(row.school_name || "")}">
+            ${visibleRows.map((row) => `<tr class="trend-row-clickable" data-trend-student="true" data-student-key="${escapeHtml(row.student_key || "")}">
               <td class="trend-sticky-grade"><div class="trend-cell-core trend-grade-summary"><div class="trend-grade-value">${escapeHtml(row.gradeLabel)}</div><div class="trend-class-count">지원 ${row.apps.length}건</div>${row.yearLabels && row.yearLabels.length ? `<div class="trend-grade-years">${row.yearLabels.map((year) => `<span class="trend-year-chip">${escapeHtml(year)}</span>`).join("")}</div>` : ""}</div></td>
               ${Array.from({ length: visibleApps }, (_, index) => {
                 const app = row.apps[index];
@@ -6863,7 +7630,6 @@ body.protected-export-locked {
         if (!target) return;
         openStudentDetailModal({
           student_key: target.dataset.studentKey || "",
-          school_name: target.dataset.studentSchool || "",
         });
       };
     }
@@ -6948,7 +7714,7 @@ body.protected-export-locked {
           enableStudentLinks ? "detail-row-clickable" : "",
         ].filter(Boolean);
         const rowAttrs = enableStudentLinks
-          ? ` data-student-drilldown="true" data-student-key="${escapeHtml(getStudentRecordKey(r))}" data-student-school="${escapeHtml(r.school_name || "")}"`
+          ? ` data-student-drilldown="true" data-student-key="${escapeHtml(getStudentRecordKey(r))}"`
           : "";
         const cells = columns.map((column) => {
           const cellContent = column.render
@@ -6976,6 +7742,38 @@ body.protected-export-locked {
             <colgroup>${colgroup}</colgroup>
             <thead><tr>${thead}</tr></thead>
             <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    function buildSummaryTableHtml(view = {}) {
+      const columns = Array.isArray(view.columns) ? view.columns : [];
+      const rows = Array.isArray(view.rows) ? view.rows : [];
+      const toolbarHtml = view.metaText
+        ? `<div class="detail-toolbar"><div class="detail-toolbar-main"><div class="detail-toolbar-meta">${escapeHtml(view.metaText)}</div></div></div>`
+        : "";
+      if (!columns.length || !rows.length) {
+        return `<div class="detail-modal-content">${toolbarHtml}<div class="empty">데이터 없음</div></div>`;
+      }
+      const colgroup = columns.map((column) => `<col${column.width ? ` style="width:${escapeHtml(column.width)}"` : ""}>`).join("");
+      const alignClass = (align) => align === "right"
+        ? "detail-align-right"
+        : align === "center"
+          ? "detail-align-center"
+          : "";
+      const thead = columns.map((column) => `<th class="${alignClass(column.align)}">${escapeHtml(column.header || "")}</th>`).join("");
+      const tbody = rows.map((row) => `<tr>${columns.map((column) => {
+        const value = row && row[column.key] !== undefined && row[column.key] !== null ? row[column.key] : "-";
+        return `<td class="${alignClass(column.align)}">${escapeHtml(value)}</td>`;
+      }).join("")}</tr>`).join("");
+      return `<div class="detail-modal-content">
+        ${toolbarHtml}
+        <div class="detail-table-wrap">
+          <table class="detail-table">
+            <colgroup>${colgroup}</colgroup>
+            <thead><tr>${thead}</tr></thead>
+            <tbody>${tbody}</tbody>
           </table>
         </div>
       </div>`;
@@ -7141,7 +7939,6 @@ body.protected-export-locked {
       return records.map((r) => {
         const row = {
           "학년도": r.academic_year || "",
-          "학교": r.school_name || "",
           "소재지": r.school_location || "",
           "지역(대학)": r.region || "",
         };
@@ -7169,6 +7966,17 @@ body.protected-export-locked {
       const currentView = modalState.viewStack[modalState.viewStack.length - 1];
       if (!currentView) {
         closeDetailModal();
+        return;
+      }
+      if (currentView.type === "summaryTable") {
+        detailModalBackBtn.hidden = modalState.viewStack.length <= 1;
+        detailModalExportBtn.hidden = !(Array.isArray(currentView.exportRows) && currentView.exportRows.length);
+        detailModalTitleEl.textContent = currentView.title || "집계표";
+        detailModalSubtitleEl.textContent = currentView.subtitle || "";
+        detailModalBodyEl.innerHTML = buildSummaryTableHtml(currentView);
+        detailModalEl.hidden = false;
+        document.body.style.overflow = "hidden";
+        detailModalBodyEl.scrollTop = 0;
         return;
       }
       const detailRows = getDetailRowsForView(currentView);
@@ -7224,6 +8032,20 @@ body.protected-export-locked {
     function openCategoryDetailModal(type, value, label, records) {
       dataState.reportRecords = records;
       modalState.viewStack = [createDetailModalView({ type, value, label })];
+      renderDetailModalView();
+    }
+
+    function openSummaryTableModal(config = {}) {
+      modalState.viewStack = [createDetailModalView({
+        type: "summaryTable",
+        title: config.title || "집계표",
+        subtitle: config.subtitle || "",
+        metaText: config.metaText || "",
+        columns: Array.isArray(config.columns) ? config.columns.map((column) => ({ ...column })) : [],
+        rows: Array.isArray(config.rows) ? config.rows.map((row) => ({ ...row })) : [],
+        exportRows: Array.isArray(config.exportRows) ? config.exportRows.map((row) => ({ ...row })) : [],
+        exportOptions: config.exportOptions ? { ...config.exportOptions } : { sheetName: "집계표", filenameBase: "집계표" },
+      })];
       renderDetailModalView();
     }
 
@@ -7377,6 +8199,16 @@ body.protected-export-locked {
     function handleDetailModalExport() {
       const currentView = modalState.viewStack[modalState.viewStack.length - 1];
       if (!currentView) return;
+      if (currentView.type === "summaryTable") {
+        const exportRows = Array.isArray(currentView.exportRows) ? currentView.exportRows : [];
+        if (!exportRows.length) return;
+        const exportOptions = currentView.exportOptions || { sheetName: "집계표", filenameBase: "집계표" };
+        const worksheet = XLSX.utils.json_to_sheet(exportRows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, exportOptions.sheetName || "집계표");
+        XLSX.writeFile(workbook, `${sanitizeFilenamePart(exportOptions.filenameBase || "집계표")}.xlsx`);
+        return;
+      }
       const detailRows = getFilteredDetailRowsForView(currentView, getDetailRowsForView(currentView));
       if (!detailRows.length) return;
       const viewConfig = getDetailViewConfig(currentView, detailRows);
@@ -7647,6 +8479,9 @@ body.protected-export-locked {
         preloadedState,
         { years, allRecords: normalizedRecords }
       );
+      if (preloadedState.singleTabExport && preloadedState.singleTabExport.activeTab) {
+        restrictReportToSingleTab(preloadedState.singleTabExport.activeTab);
+      }
       setStatus("");
       setLandingVisibility(false);
     }
