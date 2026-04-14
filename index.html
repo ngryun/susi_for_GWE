@@ -3691,6 +3691,9 @@ body.protected-export-locked {
       const { univs, depts, apptypes, subtypes, years } = index;
       const metaYears = meta.years || years;
       const metaAllRecords = meta.allRecords || records;
+      // onclick 핸들러에서 접근할 수 있도록 dataState에 저장
+      dataState.metaYears = metaYears;
+      dataState.metaAllRecords = metaAllRecords;
 
       const header = `
         <div class="fixed-header">
@@ -4905,66 +4908,8 @@ body.protected-export-locked {
       }
     }
 
-    function registerAnalyticsAuxRenderers(records, allRecords, years, plotIdBase, containerId) {
-      for (let pid = plotIdBase - 1; pid >= ANALYTICS_UNIV_PLOT_BASE; pid--) {
-        if (document.getElementById(`band-bar-${pid}`)) {
-          renderState.auxRendererMap[`band-bar-${pid}`] = () => renderGradeBands(records, "all_subj_grade", pid);
-        }
-        if (document.getElementById(`apptype-band-section-${pid}`)) {
-          renderState.auxRendererMap[`apptype-band-section-${pid}`] = () => renderApptypeGradeBandComparisons(records, pid);
-        }
-        if (document.getElementById(`apptype-table-${pid}`)) {
-          renderState.auxRendererMap[`apptype-table-${pid}`] = () => renderApptypeStats(records, pid);
-        }
-        if (document.getElementById(`region-table-${pid}`)) {
-          renderState.auxRendererMap[`region-table-${pid}`] = () => renderRegionStats(records, pid);
-        }
-      }
-      // 연도별 비교
-      const yrs = years || [];
-      if (containerId && document.getElementById(containerId)) {
-        renderState.auxRendererMap[containerId] = () => renderYearApptypeTrendTable(allRecords, yrs, containerId);
-      }
-    }
-
-    function initAnalyticsLazyRendering(rootEl) {
-      if (!rootEl) return;
-      // Plot containers
-      const plotDivs = rootEl.querySelectorAll(".plot-container[id^='plot-']");
-      if ("IntersectionObserver" in window) {
-        renderState.analyticsPlotObserver = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              const plotId = entry.target.id.split("-")[1];
-              renderPlotIfNeeded(plotId);
-            }
-          });
-        }, { root: null, rootMargin: "240px 0px", threshold: 0.01 });
-        plotDivs.forEach((div) => renderState.analyticsPlotObserver.observe(div));
-      } else {
-        plotDivs.forEach((div) => renderPlotIfNeeded(div.id.split("-")[1]));
-      }
-      // Aux containers — find by auxRendererMap keys within rootEl
-      const auxIds = Object.keys(renderState.auxRendererMap).filter((id) => {
-        const el = document.getElementById(id);
-        return el && rootEl.contains(el);
-      });
-      if ("IntersectionObserver" in window) {
-        renderState.analyticsAuxObserver = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => {
-            if (!entry.isIntersecting) return;
-            renderAuxById(entry.target.id);
-            renderState.analyticsAuxObserver.unobserve(entry.target);
-          });
-        }, { root: null, rootMargin: "240px 0px", threshold: 0.01 });
-        auxIds.forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) renderState.analyticsAuxObserver.observe(el);
-        });
-      } else {
-        auxIds.forEach((id) => renderAuxById(id));
-      }
-    }
+    /* registerAnalyticsAuxRenderers / initAnalyticsLazyRendering 제거됨
+       — showUnivAnalytics, showDeptAnalytics에서 직접 동기 렌더로 대체 */
 
     function bindGradeBandModeTogglesScoped(rootEl, records) {
       if (!rootEl) return;
@@ -5449,8 +5394,16 @@ body.protected-export-locked {
 
       contentEl.innerHTML = html;
 
-      registerAnalyticsAuxRenderers(univRecords, univAllRecords, years, plotCounter, "univ-analytics-year-apptype");
-      initAnalyticsLazyRendering(contentEl);
+      // 분석 뷰: 모든 aux 컨테이너를 직접 동기 렌더 (requestAnimationFrame 타이밍 이슈 방지)
+      const pid = ANALYTICS_UNIV_PLOT_BASE;
+      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(univRecords, "all_subj_grade", pid);
+      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(univRecords, pid);
+      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(univRecords, pid);
+      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(univRecords, pid);
+      if (years.length > 1 && document.getElementById("univ-analytics-year-apptype")) {
+        renderYearApptypeTrendTable(univAllRecords, years, "univ-analytics-year-apptype");
+      }
+
       bindGradeBandModeTogglesScoped(contentEl, univRecords);
       bindApptypeBandModeTogglesScoped(contentEl, univRecords);
       bindPlotExportButtons(contentEl);
@@ -5526,8 +5479,16 @@ body.protected-export-locked {
 
       contentEl.innerHTML = html;
 
-      registerAnalyticsAuxRenderers(deptRecords, deptAllRecords, years, plotCounter, "dept-analytics-year-apptype");
-      initAnalyticsLazyRendering(contentEl);
+      // 분석 뷰: 모든 aux 컨테이너를 직접 동기 렌더 (requestAnimationFrame 타이밍 이슈 방지)
+      const pid = ANALYTICS_DEPT_PLOT_BASE;
+      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(deptRecords, "all_subj_grade", pid);
+      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(deptRecords, pid);
+      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(deptRecords, pid);
+      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(deptRecords, pid);
+      if (years.length > 1 && document.getElementById("dept-analytics-year-apptype")) {
+        renderYearApptypeTrendTable(deptAllRecords, years, "dept-analytics-year-apptype");
+      }
+
       bindGradeBandModeTogglesScoped(contentEl, deptRecords);
       bindApptypeBandModeTogglesScoped(contentEl, deptRecords);
       bindPlotExportButtons(contentEl);
