@@ -1898,6 +1898,16 @@
       color: var(--text-primary);
       font-weight: 700;
       font-variant-numeric: tabular-nums;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .apptype-chip-count-pct {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      letter-spacing: 0;
+      font-variant-numeric: tabular-nums;
     }
     .apptype-chip-rate-row {
       display: flex;
@@ -2951,8 +2961,11 @@
       return Number.isFinite(n) ? n : null;
     }
     function parseIsRural(v) {
-      const raw = safe(v).toUpperCase();
-      return raw === "O" ? "O" : raw === "X" ? "X" : "";
+      const raw = safe(v).trim();
+      // Handle Unicode circle symbols (○ U+25CB, ◯ U+25EF, ● U+25CF) as well as ASCII O/o
+      if (raw === "○" || raw === "◯" || raw === "●" || raw.toUpperCase() === "O") return "O";
+      if (raw === "×" || raw === "✕" || raw === "✗" || raw.toUpperCase() === "X") return "X";
+      return "";
     }
     function parseEnrollmentCount(v) {
       const n = parseInt(v, 10);
@@ -3032,6 +3045,7 @@
     }
     function filterRecordsByLocation(records, locationFilter) {
       if (locationFilter === "all") return records;
+      if (locationFilter === "농어촌") return records.filter(r => r.is_rural === "O");
       return records.filter(r => deriveLocationType(r.school_location) === locationFilter);
     }
     function applyGlobalFilters(allRecords) {
@@ -3040,14 +3054,19 @@
       return filtered;
     }
     function hasMultipleLocationTypes(records) {
-      let hasSi = false, hasGun = false;
+      let hasSi = false, hasGun = false, hasRural = false;
       for (const r of records) {
         const t = deriveLocationType(r.school_location);
         if (t === "시") hasSi = true;
         if (t === "군") hasGun = true;
+        if (r.is_rural === "O") hasRural = true;
         if (hasSi && hasGun) return true;
+        if (hasRural && (hasSi || hasGun)) return true;
       }
-      return false;
+      return hasRural && (hasSi || hasGun);
+    }
+    function hasRuralRecords(records) {
+      return records.some(r => r.is_rural === "O");
     }
     function formatAcademicYearScope(records = []) {
       const years = getAvailableYears(records);
@@ -3665,6 +3684,7 @@ body.protected-export-locked {
                 <button type="button" class="segmented-btn ${filterState.locationFilter === "all" ? "active" : ""}" data-location="all">전체</button>
                 <button type="button" class="segmented-btn ${filterState.locationFilter === "시" ? "active" : ""}" data-location="시">시</button>
                 <button type="button" class="segmented-btn ${filterState.locationFilter === "군" ? "active" : ""}" data-location="군">군</button>
+                ${hasRuralRecords(metaAllRecords) ? `<button type="button" class="segmented-btn ${filterState.locationFilter === "농어촌" ? "active" : ""}" data-location="농어촌">농어촌</button>` : ""}
               </div>
             </div>` : ""}
           </div>` : ""}
@@ -5506,7 +5526,7 @@ body.protected-export-locked {
         const registrationPct = clampPct(s.registrationRate);
         return `<article class="apptype-chip" data-detail-view="${escapeHtml(s.detailView || "")}" data-detail-value="${escapeHtml(s.detailValue || s.label || "")}" data-detail-label="${escapeHtml(s.label || "")}">
           <h4 class="apptype-chip-title">${s.label}</h4>
-          <div class="apptype-chip-count">${s.total.toLocaleString()}건</div>
+          <div class="apptype-chip-count">${s.total.toLocaleString()}건<span class="apptype-chip-count-pct">${detailRecords.length ? (s.total / detailRecords.length * 100).toFixed(1) + "%" : ""}</span></div>
           <div class="apptype-chip-rate-row">
             <span class="apptype-chip-rate-label">합격률(충원포함)</span>
             <span class="apptype-chip-rate-value">${pct.toFixed(1)}%</span>
