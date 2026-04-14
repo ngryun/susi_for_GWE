@@ -586,6 +586,44 @@
       gap: 10px;
       margin-top: 16px;
     }
+    .dept-finder-toolbar {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .dept-finder-selection-panel {
+      margin-top: 16px;
+      padding: 14px 16px 16px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(15, 118, 110, 0.06), rgba(255, 255, 255, 0.92));
+    }
+    .dept-finder-selection-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .dept-finder-selection-copy {
+      min-width: 0;
+      flex: 1 1 240px;
+    }
+    .dept-finder-selection-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #115e59;
+      line-height: 1.4;
+    }
+    .dept-finder-selection-meta {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      line-height: 1.45;
+    }
     .dept-finder-results-head {
       display: flex;
       align-items: center;
@@ -639,7 +677,13 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 16px;
+      margin-top: 12px;
+    }
+    .dept-finder-selection-empty {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
     }
     .dept-finder-chip {
       display: inline-flex;
@@ -666,7 +710,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 16px;
     }
     .dept-finder-hint {
       margin-top: 16px;
@@ -1804,6 +1847,11 @@
       gap: 6px;
       flex-wrap: wrap;
     }
+    .chart-export-menu {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
     .chart-action-btn {
       border: 1px solid #cbd5e1;
       background: #ffffff;
@@ -1817,24 +1865,86 @@
       cursor: pointer;
       transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
     }
-    .chart-action-btn[data-plot-export-format="svg"] {
-      border-color: #bfdbfe;
-      background: #eff6ff;
-      color: #1d4ed8;
-    }
     .chart-action-btn:hover {
       border-color: #94a3b8;
       background: #f8fafc;
       transform: translateY(-1px);
     }
-    .chart-action-btn[data-plot-export-format="svg"]:hover {
+    .chart-action-btn.is-open {
       border-color: #93c5fd;
-      background: #dbeafe;
+      background: #eff6ff;
+      color: #1d4ed8;
     }
     .chart-action-btn:disabled {
       opacity: 0.68;
       cursor: progress;
       transform: none;
+    }
+    .chart-action-btn-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chart-action-btn.is-icon-only {
+      padding: 6px 8px;
+    }
+    .chart-action-btn.is-icon-only .chart-action-btn-content {
+      gap: 4px;
+    }
+    .chart-action-icon {
+      width: 14px;
+      height: 14px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+    .chart-action-caret {
+      font-size: 10px;
+      line-height: 1;
+      color: currentColor;
+      transform: translateY(1px);
+    }
+    .chart-export-popover[hidden] {
+      display: none;
+    }
+    .chart-export-popover {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 132px;
+      padding: 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 12;
+    }
+    .chart-export-option {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #334155;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .chart-export-option:hover {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .chart-export-option[data-plot-export-format="svg"] {
+      color: #1d4ed8;
+    }
+    .chart-export-option:disabled {
+      opacity: 0.68;
+      cursor: progress;
     }
     .card-note-emphasis {
       display: block;
@@ -2025,6 +2135,15 @@
       .dept-finder-item button {
         width: 100%;
       }
+      .dept-finder-selection-head {
+        align-items: stretch;
+      }
+      .dept-finder-actions {
+        width: 100%;
+      }
+      .dept-finder-actions button {
+        flex: 1 1 0;
+      }
       .dept-finder-results-head {
         align-items: stretch;
       }
@@ -2203,6 +2322,7 @@
     const DEFAULT_UNIV_TOP_MODE = "ratio";
     const DEFAULT_UNIV_TOP_SORT = "total";
     const DEFAULT_UNIV_DIRECTORY_SORT = "total";
+    const DEFAULT_DEPT_FINDER_GROUPING_MODE = "dept";
     const DEPT_SEARCH_RESULT_LIMIT = 30;
     const STUDENT_TREND_MAX_APPS = 6;
     const ESTIMATED_FIVE_GRADE_STANDARDS = [
@@ -2360,6 +2480,8 @@
         univTopDisplayMode: DEFAULT_UNIV_TOP_MODE,
         univTopSortKey: DEFAULT_UNIV_TOP_SORT,
         univDirectorySortKey: DEFAULT_UNIV_DIRECTORY_SORT,
+        selectedUnivKeys: [],
+        deptFinderGroupingMode: DEFAULT_DEPT_FINDER_GROUPING_MODE,
         selectedDeptKeys: [],
         yearFilter: "all",
         locationFilter: "all",
@@ -2388,7 +2510,7 @@
     const trendState = appState.trend;
     const deptComboState = { open: false, searchText: "", pending: null };
     const analyticsViewState = {
-      univTab: { active: false, univ: "" },
+      univTab: { active: false, entries: [], univ: "" },
       deptTab: { active: false, entries: [] },
     };
 
@@ -3158,15 +3280,34 @@
         univTopMode: filterState.univTopDisplayMode,
         univTopSort: filterState.univTopSortKey,
         univDirectorySort: filterState.univDirectorySortKey,
+        univFinderSelection: Array.isArray(filterState.selectedUnivKeys) ? [...filterState.selectedUnivKeys] : [],
+        deptFinderGroupingMode: filterState.deptFinderGroupingMode || DEFAULT_DEPT_FINDER_GROUPING_MODE,
         deptFinderSelection: Array.isArray(filterState.selectedDeptKeys) ? [...filterState.selectedDeptKeys] : [],
-        univAnalytics: { ...analyticsViewState.univTab },
+        univAnalytics: {
+          active: analyticsViewState.univTab.active,
+          univ: analyticsViewState.univTab.entries[0] ? analyticsViewState.univTab.entries[0].univ : (analyticsViewState.univTab.univ || ""),
+          entries: analyticsViewState.univTab.entries.map((entry) => ({ key: entry.key, univ: entry.univ })),
+        },
         deptAnalytics: { active: analyticsViewState.deptTab.active, entries: analyticsViewState.deptTab.entries.map(e => ({ ...e })) },
       };
     }
     function buildPlotExportButtons(targetId, filenameBase, exportTitle = "") {
       return `<div class="chart-action-group">
-        <button type="button" class="chart-action-btn" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="svg" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="문서 삽입과 확대용은 SVG를 권장합니다.">SVG 저장</button>
-        <button type="button" class="chart-action-btn" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="png" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="메신저 공유나 빠른 첨부용은 PNG가 편합니다.">PNG 저장</button>
+        <div class="chart-export-menu" data-chart-export-menu="true">
+          <button type="button" class="chart-action-btn is-icon-only" data-chart-export-toggle="true" aria-expanded="false" aria-haspopup="menu" aria-label="차트 내보내기" title="차트를 이미지로 저장합니다.">
+            <span class="chart-action-btn-content">
+              <svg class="chart-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M8 1.5a.75.75 0 0 1 .75.75v6.19l1.97-1.97a.75.75 0 1 1 1.06 1.06L8.53 10.81a.75.75 0 0 1-1.06 0L4.22 7.56a.75.75 0 1 1 1.06-1.06l1.97 1.97V2.25A.75.75 0 0 1 8 1.5Z" fill="currentColor"></path>
+                <path d="M3 11.5a1 1 0 0 0-1 1V13a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13v-.5a1 1 0 1 0-2 0v.5a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13v-.5a1 1 0 0 0-1-1Z" fill="currentColor"></path>
+              </svg>
+              <span class="chart-action-caret" aria-hidden="true">▾</span>
+            </span>
+          </button>
+          <div class="chart-export-popover" data-chart-export-popover="true" role="menu" hidden>
+            <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="png" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="메신저 공유나 빠른 첨부용은 PNG가 편합니다.">PNG 저장</button>
+            <button type="button" class="chart-export-option" role="menuitem" data-plot-export-target="${escapeHtml(targetId)}" data-plot-export-format="svg" data-plot-export-name="${escapeHtml(filenameBase)}" data-plot-export-title="${escapeHtml(exportTitle)}" title="문서 삽입과 확대용은 SVG를 권장합니다.">SVG 저장</button>
+          </div>
+        </div>
       </div>`;
     }
     function sanitizeRecordsForShared(records) {
@@ -3633,7 +3774,19 @@ body.protected-export-locked {
       filterState.univTopDisplayMode = options.univTopMode || DEFAULT_UNIV_TOP_MODE;
       filterState.univTopSortKey = options.univTopSort || DEFAULT_UNIV_TOP_SORT;
       filterState.univDirectorySortKey = options.univDirectorySort || DEFAULT_UNIV_DIRECTORY_SORT;
-      filterState.selectedDeptKeys = Array.isArray(options.deptFinderSelection) ? [...options.deptFinderSelection] : [];
+      const savedUnivSelection = Array.isArray(options.univFinderSelection) ? [...options.univFinderSelection] : [];
+      filterState.selectedUnivKeys = savedUnivSelection.map((key) => {
+        if (typeof key !== "string") return key;
+        return key.startsWith("univ::") ? key : buildUnivFinderKey(key);
+      });
+      const savedDeptSelection = Array.isArray(options.deptFinderSelection) ? [...options.deptFinderSelection] : [];
+      const hasLegacyDeptSelection = savedDeptSelection.some((key) => typeof key === "string" && !key.startsWith("dept::") && !key.startsWith("univ::"));
+      filterState.deptFinderGroupingMode = options.deptFinderGroupingMode || (hasLegacyDeptSelection ? "univ" : DEFAULT_DEPT_FINDER_GROUPING_MODE);
+      filterState.selectedDeptKeys = savedDeptSelection.map((key) => {
+        if (typeof key !== "string") return key;
+        if (key.startsWith("dept::") || key.startsWith("univ::")) return key;
+        return `univ::${key}`;
+      });
       dataState.reportRecords = records;
     }
 
@@ -3809,7 +3962,7 @@ body.protected-export-locked {
           <div class="card">
             <div class="card-head">
               <div class="card-head-copy">
-                <h3>대학별 요약 목록</h3>
+                <h3>대학 검색</h3>
                 <div class="card-note">${buildUnivDirectoryNoteHtml()}</div>
               </div>
               <div class="control-group">
@@ -3826,7 +3979,21 @@ body.protected-export-locked {
                 <input type="search" id="univ-directory-search" placeholder="대학명을 입력하세요" />
               </div>
             </div>
+            <div class="dept-finder-selection-panel">
+              <div class="dept-finder-selection-head">
+                <div class="dept-finder-selection-copy">
+                  <div class="dept-finder-selection-label">선택한 대학</div>
+                  <div class="dept-finder-selection-meta" id="univ-finder-selection-meta">아직 선택한 대학이 없습니다.</div>
+                </div>
+                <div class="dept-finder-actions">
+                  <button type="button" class="primary" id="univ-finder-open-btn" disabled>상세보기</button>
+                  <button type="button" id="univ-finder-clear-btn" disabled>선택 비우기</button>
+                </div>
+              </div>
+              <div id="univ-finder-selected"></div>
+            </div>
             <div id="univ-directory-table"></div>
+            <div class="dept-finder-hint" id="univ-directory-hint">대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다. 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.</div>
           </div>
         </div></div>
         <div id="univ-analytics-view" hidden>
@@ -3843,20 +4010,37 @@ body.protected-export-locked {
             <div class="card-head">
               <div class="card-head-copy">
                 <h3>학과 검색</h3>
-                <div class="card-note">학과명을 검색한 뒤 원하는 학과를 여러 개 추가하고, <span class="card-note-emphasis">상세보기</span>로 선택된 학과의 데이터를 함께 확인할 수 있습니다.</div>
+                <div class="card-note">기본은 같은 학과를 대학 통합으로 보여주며, 필요하면 <span class="card-note-emphasis">대학별 구분</span>으로 바꿔 검색한 뒤 바로 아래 선택 영역에서 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다.</div>
               </div>
             </div>
             <div class="directory-search">
               <label for="dept-finder-search">학과명 검색</label>
               <input type="search" id="dept-finder-search" placeholder="예: 컴퓨터, 간호, 경영" />
             </div>
-            <div id="dept-finder-results"></div>
-            <div id="dept-finder-selected"></div>
-            <div class="dept-finder-actions">
-              <button type="button" class="primary" id="dept-finder-open-btn" disabled>상세보기</button>
-              <button type="button" id="dept-finder-clear-btn" disabled>선택 비우기</button>
+            <div class="dept-finder-toolbar">
+              <div class="control-group">
+                <div class="control-group-label">표시 기준</div>
+                <div class="segmented-control" id="dept-finder-mode-group" aria-label="학과 검색 표시 기준">
+                  <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "dept" ? "active" : ""}" data-dept-finder-mode="dept">학과 통합</button>
+                  <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "univ" ? "active" : ""}" data-dept-finder-mode="univ">대학별 구분</button>
+                </div>
+              </div>
             </div>
-            <div class="dept-finder-hint" id="dept-finder-hint">학과명을 입력하면 해당 키워드가 들어간 학과가 표시됩니다. 결과는 <strong>대학명 · 학과명</strong> 단위로 구분됩니다.</div>
+            <div class="dept-finder-selection-panel">
+              <div class="dept-finder-selection-head">
+                <div class="dept-finder-selection-copy">
+                  <div class="dept-finder-selection-label">선택한 학과</div>
+                  <div class="dept-finder-selection-meta" id="dept-finder-selection-meta">아직 선택한 학과가 없습니다.</div>
+                </div>
+                <div class="dept-finder-actions">
+                  <button type="button" class="primary" id="dept-finder-open-btn" disabled>상세보기</button>
+                  <button type="button" id="dept-finder-clear-btn" disabled>선택 비우기</button>
+                </div>
+              </div>
+              <div id="dept-finder-selected"></div>
+            </div>
+            <div id="dept-finder-results"></div>
+            <div class="dept-finder-hint" id="dept-finder-hint">학과명을 입력하면 해당 키워드가 들어간 학과가 표시됩니다. 이미 선택한 학과는 위 칩에서 관리할 수 있습니다.</div>
           </div>
         </div></div>
         <div id="dept-analytics-view" hidden>
@@ -3909,7 +4093,10 @@ body.protected-export-locked {
 
       // 글로벌 필터 재렌더 시 분석 뷰 상태 복원
       if (options.univAnalytics && options.univAnalytics.active) {
-        showUnivAnalytics(options.univAnalytics.univ, records, metaAllRecords, metaYears);
+        const univSelection = Array.isArray(options.univAnalytics.entries) && options.univAnalytics.entries.length
+          ? options.univAnalytics.entries
+          : (options.univAnalytics.univ || "");
+        showUnivAnalytics(univSelection, records, metaAllRecords, metaYears);
       }
       if (options.deptAnalytics && options.deptAnalytics.active) {
         showDeptAnalytics(options.deptAnalytics.entries, records, metaAllRecords, metaYears);
@@ -4537,7 +4724,7 @@ body.protected-export-locked {
       return `상위 20개 대학은 지원 건수 기준으로 선정했습니다. 막대는 ${modeText}, 우측 숫자 열은 총건수와 ${UNIV_PASS_BAND_LABEL}입니다. ${UNIV_PASS_BAND_LABEL}는 ${UNIV_PASS_BAND_DESCRIPTION}이며, 합격·충원 표본 ${UNIV_PASS_BAND_SMALL_SAMPLE_THRESHOLD}건 미만 정보는 hover와 상세 화면에서 안내합니다.<span class="card-note-emphasis">막대그래프나 대학명을 클릭하면 해당 대학의 지원 데이터를 조회할 수 있습니다.</span>`;
     }
     function buildUnivDirectoryNoteHtml() {
-      return `합격건과 합격률은 충원합격을 포함합니다. ${UNIV_PASS_BAND_LABEL}는 ${UNIV_PASS_BAND_DESCRIPTION}이며, 합격·충원 표본 ${UNIV_PASS_BAND_SMALL_SAMPLE_THRESHOLD}건 미만은 ${UNIV_PASS_BAND_SMALL_SAMPLE_TEXT}으로 표시합니다.<span class="card-note-emphasis">대학명을 클릭하면 해당 대학의 상세 데이터를 조회할 수 있습니다.</span>`;
+      return `대학명을 검색해 원하는 대학을 여러 개 추가한 뒤 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다. 합격건과 합격률은 충원합격을 포함하며, 검색 결과 정렬 기준은 오른쪽에서 바꿀 수 있습니다.`;
     }
 
     function createLayout() {
@@ -4854,17 +5041,53 @@ body.protected-export-locked {
         }
       }
     }
+    function closeChartExportMenus(root = document) {
+      if (!root || typeof root.querySelectorAll !== "function") return;
+      root.querySelectorAll("[data-chart-export-menu]").forEach((menu) => {
+        const toggle = menu.querySelector("[data-chart-export-toggle]");
+        const popover = menu.querySelector("[data-chart-export-popover]");
+        if (popover) popover.hidden = true;
+        if (toggle) {
+          toggle.classList.remove("is-open");
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
     function bindPlotExportButtons(root = document) {
       if (!root || typeof root.querySelectorAll !== "function") return;
+
+      root.querySelectorAll("[data-chart-export-menu]").forEach((menu) => {
+        const toggle = menu.querySelector("[data-chart-export-toggle]");
+        const popover = menu.querySelector("[data-chart-export-popover]");
+        if (!toggle || !popover) return;
+
+        toggle.onclick = (event) => {
+          event.stopPropagation();
+          const nextOpen = popover.hidden;
+          closeChartExportMenus(document);
+          popover.hidden = !nextOpen;
+          toggle.classList.toggle("is-open", nextOpen);
+          toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        };
+      });
+
       root.querySelectorAll("[data-plot-export-target]").forEach((btn) => {
-        btn.onclick = async () => {
+        btn.onclick = async (event) => {
+          event.stopPropagation();
           const targetId = btn.getAttribute("data-plot-export-target") || "";
           const format = btn.getAttribute("data-plot-export-format") || "svg";
           const filenameBase = btn.getAttribute("data-plot-export-name") || "차트";
           const exportTitle = btn.getAttribute("data-plot-export-title") || "";
           if (!targetId) return;
+
+          const menu = btn.closest("[data-chart-export-menu]");
+          const toggle = menu ? menu.querySelector("[data-chart-export-toggle]") : null;
           const originalLabel = btn.textContent;
+
+          closeChartExportMenus(document);
           btn.disabled = true;
+          if (toggle) toggle.disabled = true;
           btn.textContent = format.toUpperCase() + " 저장중...";
           try {
             await downloadPlotImage(targetId, filenameBase, format, exportTitle);
@@ -4873,10 +5096,26 @@ body.protected-export-locked {
             window.alert(error && error.message ? error.message : "차트 저장 중 오류가 발생했습니다.");
           } finally {
             btn.disabled = false;
+            if (toggle) toggle.disabled = false;
             btn.textContent = originalLabel;
           }
         };
       });
+
+      document.removeEventListener("click", handleChartExportMenuDocumentClick);
+      document.removeEventListener("keydown", handleChartExportMenuDocumentKeydown);
+      document.addEventListener("click", handleChartExportMenuDocumentClick);
+      document.addEventListener("keydown", handleChartExportMenuDocumentKeydown);
+    }
+
+    function handleChartExportMenuDocumentClick(event) {
+      if (event.target instanceof Element && event.target.closest("[data-chart-export-menu]")) return;
+      closeChartExportMenus(document);
+    }
+
+    function handleChartExportMenuDocumentKeydown(event) {
+      if (event.key !== "Escape") return;
+      closeChartExportMenus(document);
     }
 
     /* ── Analytics sub-view helpers ── */
@@ -5221,6 +5460,10 @@ body.protected-export-locked {
       });
     }
 
+    function buildUnivFinderKey(univ) {
+      return `univ::${univ || "미상"}`;
+    }
+
     function makeUnivDirectoryStats(records) {
       const grouped = {};
       records.forEach((r) => {
@@ -5258,74 +5501,137 @@ body.protected-export-locked {
         });
     }
 
+    function makeUnivFinderEntries(records) {
+      return makeUnivDirectoryStats(records).map((item) => ({
+        ...item,
+        key: buildUnivFinderKey(item.univ),
+      }));
+    }
+
+    function getSelectedUnivEntries(entries) {
+      const selectedSet = new Set(filterState.selectedUnivKeys);
+      return entries.filter((entry) => selectedSet.has(entry.key));
+    }
+
+    function addUnivFinderSelection(keys = []) {
+      if (!Array.isArray(keys) || !keys.length) return false;
+      const nextSelection = new Set(filterState.selectedUnivKeys);
+      let changed = false;
+      keys.forEach((key) => {
+        if (!key || nextSelection.has(key)) return;
+        nextSelection.add(key);
+        changed = true;
+      });
+      if (changed) filterState.selectedUnivKeys = Array.from(nextSelection);
+      return changed;
+    }
+
+    function formatUnivSelectionSummary(entries) {
+      if (!entries.length) return "선택 대학 없음";
+      if (entries.length === 1) return entries[0].univ;
+      return `${entries[0].univ} 외 ${entries.length - 1}개`;
+    }
+
     function renderUnivDirectory(records) {
       const hostEl = document.getElementById("univ-directory-table");
-      if (!hostEl) return;
+      const selectedEl = document.getElementById("univ-finder-selected");
+      const selectionMetaEl = document.getElementById("univ-finder-selection-meta");
+      const openBtn = document.getElementById("univ-finder-open-btn");
+      const clearBtn = document.getElementById("univ-finder-clear-btn");
+      const hintEl = document.getElementById("univ-directory-hint");
+      if (!hostEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
+
       syncUnivDirectorySortButtons();
       const queryEl = document.getElementById("univ-directory-search");
       const keyword = safe(queryEl ? queryEl.value : "").toLowerCase();
-      const rows = makeUnivDirectoryStats(records).filter((item) => {
-        if (!keyword) return true;
-        return item.univ.toLowerCase().includes(keyword);
-      });
-      if (!rows.length) {
-        hostEl.innerHTML = '<div class="empty">조건에 맞는 대학이 없습니다.</div>';
-        return;
+
+      const entries = makeUnivFinderEntries(records);
+      const selectedEntries = getSelectedUnivEntries(entries);
+      const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
+
+      selectionMetaEl.textContent = selectedEntries.length
+        ? `선택 ${selectedEntries.length}개 · ${formatUnivSelectionSummary(selectedEntries)}`
+        : "아직 선택한 대학이 없습니다.";
+
+      if (!keyword) {
+        hostEl.innerHTML = "";
+        hintEl.textContent = "대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다. 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.";
+      } else {
+        const matches = entries.filter((item) => item.univ.toLowerCase().includes(keyword));
+        const addableMatches = matches.filter((entry) => !selectedSet.has(entry.key));
+        const visibleMatches = addableMatches.slice(0, DEPT_SEARCH_RESULT_LIMIT);
+        const hiddenSelectedCount = matches.length - addableMatches.length;
+
+        if (!matches.length) {
+          hostEl.innerHTML = '<div class="empty">조건에 맞는 대학이 없습니다.</div>';
+          hintEl.textContent = "검색어를 바꿔 다시 찾아보세요.";
+        } else if (!visibleMatches.length) {
+          hostEl.innerHTML = '<div class="empty">검색된 대학이 모두 이미 선택되어 있습니다.</div>';
+          hintEl.textContent = "위 칩에서 선택을 해제하거나 검색어를 바꿔 다시 찾아보세요.";
+        } else {
+          hostEl.innerHTML = `<div class="dept-finder-results">
+            <div class="dept-finder-results-head">
+              <div class="dept-finder-results-meta">검색 일치 ${matches.length}개 · 현재 표시 ${visibleMatches.length}개${hiddenSelectedCount ? ` · 이미 선택 ${hiddenSelectedCount}개 제외` : ""}</div>
+              <button type="button" class="dept-finder-add-all" data-univ-add-all="true">표시 결과 모두 추가 (${visibleMatches.length})</button>
+            </div>
+            ${visibleMatches.map((item) => `<div class="dept-finder-item">
+              <div class="dept-finder-item-copy">
+                <div class="dept-finder-item-title">${escapeHtml(item.univ)}</div>
+                <div class="dept-finder-item-subtitle">${escapeHtml(`${item.region} · ${item.total.toLocaleString()}건 · 합격률 ${item.allPassRate.toFixed(1)}%`)}</div>
+              </div>
+              <button type="button" data-univ-add="${escapeHtml(item.key)}">추가</button>
+            </div>`).join("")}
+          </div>`;
+          if (addableMatches.length > DEPT_SEARCH_RESULT_LIMIT) {
+            hintEl.textContent = hiddenSelectedCount
+              ? `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`
+              : `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 검색어를 더 구체적으로 입력해 주세요.`;
+          } else if (hiddenSelectedCount) {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`;
+          } else {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다.`;
+          }
+        }
       }
-      hostEl.innerHTML = `<div class="summary-table-wrap">
-        <table class="summary-table">
-          <colgroup>
-            <col class="summary-col-region">
-            <col class="summary-col-univ">
-            <col class="summary-col-total">
-            <col class="summary-col-pass">
-            <col class="summary-col-rate">
-            <col class="summary-col-band">
-            <col style="width:60px;">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>지역</th>
-              <th>대학명</th>
-              <th class="summary-cell-number">지원건수</th>
-              <th class="summary-cell-number">합격건</th>
-              <th class="summary-cell-number">합격률</th>
-              <th class="summary-cell-number">${UNIV_PASS_BAND_LABEL}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map((item) => `<tr>
-              <td><span class="summary-cell-ellipsis" title="${escapeHtml(item.region)}">${escapeHtml(item.region)}</span></td>
-              <td><button type="button" class="summary-link" data-univ-open="${escapeHtml(item.univ)}">${escapeHtml(item.univ)}</button></td>
-              <td class="summary-cell-number">${item.total.toLocaleString()}건</td>
-              <td class="summary-cell-number">${item.allPass.toLocaleString()}건</td>
-              <td class="summary-cell-number">${item.allPassRate.toFixed(1)}%</td>
-              <td class="summary-cell-number summary-cell-band">${formatUnivPassBandTableCellHtml(item.passBandLabel)}</td>
-              <td class="summary-cell-number"><button type="button" class="summary-link-sub" data-univ-detail="${escapeHtml(item.univ)}">상세목록</button></td>
-            </tr>`).join("")}
-          </tbody>
-        </table>
-      </div>`;
+
+      selectedEl.innerHTML = selectedEntries.length
+        ? `<div class="dept-finder-selected">${selectedEntries.map((entry) => `
+            <div class="dept-finder-chip">
+              <span>${escapeHtml(entry.univ)}</span>
+              <button type="button" aria-label="${escapeHtml(entry.univ)} 선택 해제" data-univ-remove="${escapeHtml(entry.key)}">×</button>
+            </div>
+          `).join("")}</div>`
+        : '<div class="dept-finder-selection-empty">아직 선택한 대학이 없습니다. 검색 결과에서 대학을 추가해 주세요.</div>';
+
+      openBtn.disabled = selectedEntries.length === 0;
+      clearBtn.disabled = selectedEntries.length === 0;
+
       hostEl.onclick = (event) => {
-        // 상세목록 버튼 → 기존 모달
-        const detailTrigger = event.target instanceof Element ? event.target.closest("[data-univ-detail]") : null;
-        if (detailTrigger) {
-          const univ = detailTrigger.getAttribute("data-univ-detail") || "";
-          if (univ) openUnivDetailModal(univ, records);
+        const addAllTrigger = event.target instanceof Element ? event.target.closest("[data-univ-add-all]") : null;
+        if (addAllTrigger) {
+          if (!keyword) return;
+          const matches = entries
+            .filter((item) => item.univ.toLowerCase().includes(keyword))
+            .filter((item) => !selectedSet.has(item.key))
+            .slice(0, DEPT_SEARCH_RESULT_LIMIT);
+          const changed = addUnivFinderSelection(matches.map((item) => item.key));
+          if (changed) renderUnivDirectory(records);
           return;
         }
-        // 대학명 클릭 → 분석 뷰
-        const trigger = event.target instanceof Element ? event.target.closest("[data-univ-open]") : null;
+        const trigger = event.target instanceof Element ? event.target.closest("[data-univ-add]") : null;
         if (!trigger) return;
-        const univ = trigger.getAttribute("data-univ-open") || "";
-        if (!univ) return;
-        showUnivAnalytics(univ, records, dataState.metaAllRecords || records, dataState.metaYears || []);
+        const key = trigger.getAttribute("data-univ-add") || "";
+        if (!key) return;
+        const changed = addUnivFinderSelection([key]);
+        if (changed) renderUnivDirectory(records);
       };
     }
 
     function bindUnivDirectoryControls(records) {
       const searchEl = document.getElementById("univ-directory-search");
+      const selectedEl = document.getElementById("univ-finder-selected");
+      const openBtn = document.getElementById("univ-finder-open-btn");
+      const clearBtn = document.getElementById("univ-finder-clear-btn");
       if (searchEl) {
         searchEl.addEventListener("input", () => {
           renderUnivDirectory(records);
@@ -5343,26 +5649,80 @@ body.protected-export-locked {
           renderUnivDirectory(records);
         });
       });
+      if (selectedEl) {
+        selectedEl.addEventListener("click", (event) => {
+          const trigger = event.target instanceof Element ? event.target.closest("[data-univ-remove]") : null;
+          if (!trigger) return;
+          const key = trigger.getAttribute("data-univ-remove") || "";
+          if (!key) return;
+          filterState.selectedUnivKeys = filterState.selectedUnivKeys.filter((item) => item !== key);
+          renderUnivDirectory(records);
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          filterState.selectedUnivKeys = [];
+          renderUnivDirectory(records);
+        });
+      }
+      if (openBtn) {
+        openBtn.addEventListener("click", () => {
+          const selectedEntries = getSelectedUnivEntries(makeUnivFinderEntries(records));
+          if (!selectedEntries.length) return;
+          showUnivAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
+        });
+      }
     }
 
-    function showUnivAnalytics(univ, records, allRecords, metaYears) {
+    function normalizeUnivAnalyticsEntries(selection, records) {
+      const entries = makeUnivFinderEntries(records);
+      if (Array.isArray(selection) && selection.length) {
+        const keySet = new Set(selection.map((entry) => {
+          if (entry && entry.key) return entry.key;
+          if (entry && entry.univ) return buildUnivFinderKey(entry.univ);
+          return "";
+        }).filter(Boolean));
+        return entries.filter((entry) => keySet.has(entry.key));
+      }
+      if (typeof selection === "string" && selection) {
+        return entries.filter((entry) => entry.univ === selection);
+      }
+      return [];
+    }
+
+    function showUnivAnalytics(selection, records, allRecords, metaYears) {
       const listView = document.getElementById("univ-list-view");
       const analyticsView = document.getElementById("univ-analytics-view");
       const titleEl = document.getElementById("univ-analytics-title");
       const subtitleEl = document.getElementById("univ-analytics-subtitle");
       const contentEl = document.getElementById("univ-analytics-content");
-      if (!listView || !analyticsView || !contentEl) return;
+      const entries = normalizeUnivAnalyticsEntries(selection, records);
+      if (!listView || !analyticsView || !contentEl || !entries.length) return;
 
       listView.hidden = true;
       analyticsView.hidden = false;
-      analyticsViewState.univTab = { active: true, univ };
-      if (titleEl) titleEl.textContent = univ;
+      analyticsViewState.univTab = {
+        active: true,
+        univ: entries[0].univ,
+        entries: entries.map((entry) => ({ key: entry.key, univ: entry.univ })),
+      };
+      if (titleEl) {
+        titleEl.textContent = entries.length === 1
+          ? entries[0].univ
+          : `${entries[0].univ} 외 ${entries.length - 1}개 대학`;
+      }
 
-      const univRecords = records.filter(r => r.univ === univ);
-      const univAllRecords = allRecords.filter(r => r.univ === univ);
+      const selectedUnivs = new Set(entries.map((entry) => entry.univ));
+      const univRecords = records.filter((r) => selectedUnivs.has(r.univ || "미상"));
+      const univAllRecords = allRecords.filter((r) => selectedUnivs.has(r.univ || "미상"));
       const years = metaYears || [];
       const yearScope = formatAcademicYearScope(univRecords);
-      if (subtitleEl) subtitleEl.textContent = `총 ${univRecords.length}건${yearScope ? " · " + yearScope : ""}`;
+      if (subtitleEl) {
+        const subtitleParts = [];
+        subtitleParts.push(`총 ${univRecords.length}건`);
+        if (yearScope) subtitleParts.push(yearScope);
+        subtitleEl.textContent = subtitleParts.join(" · ");
+      }
 
       // cleanup previous
       cleanupAnalyticsPlots(contentEl);
@@ -5370,7 +5730,7 @@ body.protected-export-locked {
 
       let plotCounter = ANALYTICS_UNIV_PLOT_BASE;
       const block = buildPlotBlock(
-        univRecords, plotCounter, univ,
+        univRecords, plotCounter, entries.length === 1 ? entries[0].univ : "선택 대학",
         true,  false, true, true, false, true, false, false, true
       );
       renderState.plotRegistryData[plotCounter] = block.data;
@@ -5417,7 +5777,7 @@ body.protected-export-locked {
       const contentEl = document.getElementById("univ-analytics-content");
       if (listView) listView.hidden = false;
       if (analyticsView) analyticsView.hidden = true;
-      analyticsViewState.univTab = { active: false, univ: "" };
+      analyticsViewState.univTab = { active: false, entries: [], univ: "" };
       cleanupAnalyticsPlots(contentEl);
       if (contentEl) contentEl.innerHTML = "";
     }
@@ -5434,28 +5794,31 @@ body.protected-export-locked {
       analyticsView.hidden = false;
       analyticsViewState.deptTab = { active: true, entries: entries.map(e => ({ ...e })) };
 
-      const entrySet = new Set(entries.map(e => `${e.univ}|||${e.dept}`));
-      const deptRecords = records.filter(r => entrySet.has(`${r.univ}|||${r.dept}`));
-      const deptAllRecords = allRecords.filter(r => entrySet.has(`${r.univ}|||${r.dept}`));
+      const entryKeySet = new Set(entries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
+      const deptRecords = records.filter((r) => entryKeySet.has(buildDeptFinderKey(r.univ, r.dept)));
+      const deptAllRecords = allRecords.filter((r) => entryKeySet.has(buildDeptFinderKey(r.univ, r.dept)));
       const years = metaYears || [];
 
       if (titleEl) {
-        if (entries.length === 1) {
-          titleEl.textContent = `${entries[0].univ} ${entries[0].dept}`;
-        } else {
-          const first = entries[0];
-          titleEl.textContent = `${first.univ} ${first.dept} 외 ${entries.length - 1}건`;
-        }
+        titleEl.textContent = entries.length === 1
+          ? buildDeptFinderAnalyticsTitle(entries[0])
+          : `${buildDeptFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
       }
       const yearScope = formatAcademicYearScope(deptRecords);
-      if (subtitleEl) subtitleEl.textContent = `총 ${deptRecords.length}건${yearScope ? " · " + yearScope : ""}`;
+      if (subtitleEl) {
+        const subtitleParts = [];
+        if (entries.length === 1) subtitleParts.push(buildDeptFinderUniversitySummary(entries[0]));
+        subtitleParts.push(`총 ${deptRecords.length}건`);
+        if (yearScope) subtitleParts.push(yearScope);
+        subtitleEl.textContent = subtitleParts.join(" · ");
+      }
 
       cleanupAnalyticsPlots(contentEl);
       contentEl.innerHTML = "";
 
       let plotCounter = ANALYTICS_DEPT_PLOT_BASE;
       const block = buildPlotBlock(
-        deptRecords, plotCounter, entries.length === 1 ? `${entries[0].univ} ${entries[0].dept}` : "선택 학과",
+        deptRecords, plotCounter, entries.length === 1 ? buildDeptFinderAnalyticsTitle(entries[0]) : "선택 학과",
         true, false, true, true, false, true, false, false, true
       );
       renderState.plotRegistryData[plotCounter] = block.data;
@@ -5511,20 +5874,108 @@ body.protected-export-locked {
       return `${univ || "미상"}|||${dept || "미상"}`;
     }
 
+    function getDeptFinderGroupingMode() {
+      return filterState.deptFinderGroupingMode === "univ" ? "univ" : DEFAULT_DEPT_FINDER_GROUPING_MODE;
+    }
+
+    function buildDeptFinderEntryKey(mode, univ, dept) {
+      if (mode === "univ") return `univ::${buildDeptFinderKey(univ, dept)}`;
+      return `dept::${dept || "미상"}`;
+    }
+
+    function getDeptFinderEntryMatchKeys(entry) {
+      if (entry && Array.isArray(entry.matchKeys) && entry.matchKeys.length) return entry.matchKeys;
+      if (entry && entry.univ !== undefined && entry.dept !== undefined) return [buildDeptFinderKey(entry.univ, entry.dept)];
+      return [];
+    }
+
+    function buildDeptFinderUniversitySummary(entry) {
+      const primaryUniv = entry && (entry.primaryUniv || entry.univ) ? (entry.primaryUniv || entry.univ) : "미상";
+      const univCount = entry && Number.isFinite(entry.univCount) ? entry.univCount : (entry && entry.univ ? 1 : 0);
+      if (univCount > 1) return `${primaryUniv} 외 ${univCount - 1}개 대학`;
+      return primaryUniv;
+    }
+
     function buildDeptFinderLabel(entry) {
+      if (entry && entry.mode === "dept") return `${entry.dept}`;
       return `${entry.univ} · ${entry.dept}`;
     }
 
-    function makeDeptFinderEntries(records) {
+    function buildDeptFinderSubtitle(entry) {
+      return `${buildDeptFinderUniversitySummary(entry)} ${entry.total.toLocaleString()}건`;
+    }
+
+    function buildDeptFinderAnalyticsTitle(entry) {
+      if (entry && entry.mode === "dept") return `${entry.dept}`;
+      return `${entry.univ} ${entry.dept}`;
+    }
+
+    function makeDeptFinderEntries(records, mode = getDeptFinderGroupingMode()) {
       const grouped = {};
       records.forEach((r) => {
         const univ = r.univ || "미상";
         const dept = r.dept || "미상";
-        const key = buildDeptFinderKey(univ, dept);
-        if (!grouped[key]) grouped[key] = { key, univ, dept, total: 0 };
+        const recordKey = buildDeptFinderKey(univ, dept);
+        const key = buildDeptFinderEntryKey(mode, univ, dept);
+        if (!grouped[key]) {
+          grouped[key] = mode === "univ"
+            ? {
+                key,
+                mode,
+                univ,
+                dept,
+                total: 0,
+                matchKeySet: new Set(),
+              }
+            : {
+                key,
+                mode,
+                dept,
+                total: 0,
+                matchKeySet: new Set(),
+                univTotals: {},
+              };
+        }
         grouped[key].total += 1;
+        grouped[key].matchKeySet.add(recordKey);
+        if (mode === "dept") {
+          grouped[key].univTotals[univ] = (grouped[key].univTotals[univ] || 0) + 1;
+        }
       });
-      return Object.values(grouped).sort((a, b) => {
+
+      return Object.values(grouped).map((entry) => {
+        if (entry.mode === "univ") {
+          return {
+            key: entry.key,
+            mode: entry.mode,
+            univ: entry.univ,
+            primaryUniv: entry.univ,
+            univCount: 1,
+            universities: [entry.univ],
+            dept: entry.dept,
+            total: entry.total,
+            matchKeys: Array.from(entry.matchKeySet),
+          };
+        }
+
+        const universities = Object.keys(entry.univTotals).sort((a, b) => a.localeCompare(b, "ko"));
+        const primaryUniv = universities.slice().sort((a, b) => {
+          const countDiff = (entry.univTotals[b] || 0) - (entry.univTotals[a] || 0);
+          if (countDiff !== 0) return countDiff;
+          return a.localeCompare(b, "ko");
+        })[0] || "미상";
+        return {
+          key: entry.key,
+          mode: entry.mode,
+          univ: primaryUniv,
+          primaryUniv,
+          univCount: universities.length,
+          universities,
+          dept: entry.dept,
+          total: entry.total,
+          matchKeys: Array.from(entry.matchKeySet),
+        };
+      }).sort((a, b) => {
         const deptDiff = a.dept.localeCompare(b.dept, "ko");
         if (deptDiff !== 0) return deptDiff;
         return a.univ.localeCompare(b.univ, "ko");
@@ -5540,13 +5991,39 @@ body.protected-export-locked {
           const bStarts = b.dept.toLowerCase().startsWith(normalized) ? 0 : 1;
           if (aStarts !== bStarts) return aStarts - bStarts;
           return (b.total - a.total) || a.dept.localeCompare(b.dept, "ko") || a.univ.localeCompare(b.univ, "ko");
-        })
-        .slice(0, DEPT_SEARCH_RESULT_LIMIT);
+        });
     }
 
     function getSelectedDeptEntries(entries) {
       const selectedSet = new Set(filterState.selectedDeptKeys);
       return entries.filter((entry) => selectedSet.has(entry.key));
+    }
+
+    function syncDeptFinderModeButtons() {
+      const activeMode = getDeptFinderGroupingMode();
+      document.querySelectorAll("[data-dept-finder-mode]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-dept-finder-mode") === activeMode);
+      });
+    }
+
+    function syncDeptFinderSelectionForMode(records, nextMode) {
+      const currentMode = getDeptFinderGroupingMode();
+      if (nextMode !== "dept" && nextMode !== "univ") return;
+      if (nextMode === currentMode) return;
+
+      const currentEntries = makeDeptFinderEntries(records, currentMode);
+      const selectedEntries = getSelectedDeptEntries(currentEntries);
+      filterState.deptFinderGroupingMode = nextMode;
+
+      if (!selectedEntries.length) {
+        filterState.selectedDeptKeys = [];
+        return;
+      }
+
+      const selectedMatchKeys = new Set(selectedEntries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
+      filterState.selectedDeptKeys = makeDeptFinderEntries(records, nextMode)
+        .filter((entry) => getDeptFinderEntryMatchKeys(entry).some((matchKey) => selectedMatchKeys.has(matchKey)))
+        .map((entry) => entry.key);
     }
 
     function addDeptFinderSelection(keys = []) {
@@ -5574,44 +6051,65 @@ body.protected-export-locked {
       const searchEl = document.getElementById("dept-finder-search");
       const resultsEl = document.getElementById("dept-finder-results");
       const selectedEl = document.getElementById("dept-finder-selected");
+      const selectionMetaEl = document.getElementById("dept-finder-selection-meta");
       const openBtn = document.getElementById("dept-finder-open-btn");
       const clearBtn = document.getElementById("dept-finder-clear-btn");
       const hintEl = document.getElementById("dept-finder-hint");
-      if (!searchEl || !resultsEl || !selectedEl || !openBtn || !clearBtn || !hintEl) return;
+      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
 
-      const entries = makeDeptFinderEntries(records);
+      syncDeptFinderModeButtons();
+
+      const mode = getDeptFinderGroupingMode();
+      const entries = makeDeptFinderEntries(records, mode);
       const selectedEntries = getSelectedDeptEntries(entries);
       const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
       const keyword = safe(searchEl.value);
 
+      selectionMetaEl.textContent = selectedEntries.length
+        ? `선택 ${selectedEntries.length}개 · ${formatDeptSelectionSummary(selectedEntries)}`
+        : "아직 선택한 학과가 없습니다.";
+
       if (!keyword) {
         resultsEl.innerHTML = "";
-        hintEl.innerHTML = '학과명을 입력하면 해당 키워드가 들어간 학과가 표시됩니다. 결과는 <strong>대학명 · 학과명</strong> 단위로 구분됩니다.';
+        hintEl.textContent = mode === "dept"
+          ? "학과명을 입력하면 같은 학과는 대학을 통합해 보여줍니다. 필요하면 위 옵션에서 대학별 구분으로 바꿀 수 있습니다."
+          : "학과명을 입력하면 대학별로 구분된 결과가 표시됩니다. 이미 선택한 학과는 위 칩에서 관리할 수 있습니다.";
       } else {
         const matches = getDeptFinderMatches(entries, keyword);
+        const addableMatches = matches.filter((entry) => !selectedSet.has(entry.key));
+        const visibleMatches = addableMatches.slice(0, DEPT_SEARCH_RESULT_LIMIT);
+        const hiddenSelectedCount = matches.length - addableMatches.length;
+
         if (!matches.length) {
           resultsEl.innerHTML = '<div class="empty">일치하는 학과가 없습니다.</div>';
           hintEl.textContent = "검색어를 바꿔 다시 찾아보세요.";
+        } else if (!visibleMatches.length) {
+          resultsEl.innerHTML = '<div class="empty">검색된 학과가 모두 이미 선택되어 있습니다.</div>';
+          hintEl.textContent = "위 칩에서 선택을 해제하거나 검색어를 바꿔 다시 찾아보세요.";
         } else {
-          const addableMatches = matches.filter((entry) => !selectedSet.has(entry.key));
           resultsEl.innerHTML = `<div class="dept-finder-results">
             <div class="dept-finder-results-head">
-              <div class="dept-finder-results-meta">현재 표시된 검색 결과 ${matches.length}개 · 아직 추가되지 않은 항목 ${addableMatches.length}개</div>
-              <button type="button" class="dept-finder-add-all" data-dept-add-all="true" ${addableMatches.length ? "" : "disabled"}>${addableMatches.length ? `검색 결과 모두 추가 (${addableMatches.length})` : "모두 추가됨"}</button>
+              <div class="dept-finder-results-meta">검색 일치 ${matches.length}개 · 현재 표시 ${visibleMatches.length}개${hiddenSelectedCount ? ` · 이미 선택 ${hiddenSelectedCount}개 제외` : ""}</div>
+              <button type="button" class="dept-finder-add-all" data-dept-add-all="true">표시 결과 모두 추가 (${visibleMatches.length})</button>
             </div>
-            ${matches.map((entry) => {
-            const disabled = selectedSet.has(entry.key);
+            ${visibleMatches.map((entry) => {
             return `<div class="dept-finder-item">
               <div class="dept-finder-item-copy">
                 <div class="dept-finder-item-title">${escapeHtml(entry.dept)}</div>
-                <div class="dept-finder-item-subtitle">${escapeHtml(entry.univ)} · ${entry.total.toLocaleString()}건</div>
+                <div class="dept-finder-item-subtitle">${escapeHtml(buildDeptFinderSubtitle(entry))}</div>
               </div>
-              <button type="button" data-dept-add="${escapeHtml(entry.key)}" ${disabled ? "disabled" : ""}>${disabled ? "추가됨" : "추가"}</button>
+              <button type="button" data-dept-add="${escapeHtml(entry.key)}">추가</button>
             </div>`;
           }).join("")}</div>`;
-          hintEl.textContent = matches.length === DEPT_SEARCH_RESULT_LIMIT
-            ? `검색 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 검색어를 더 구체적으로 입력해 주세요.`
-            : `검색 결과 ${matches.length}개가 표시되었습니다.`;
+          if (addableMatches.length > DEPT_SEARCH_RESULT_LIMIT) {
+            hintEl.textContent = hiddenSelectedCount
+              ? `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`
+              : `추가 가능한 결과 상위 ${DEPT_SEARCH_RESULT_LIMIT}개만 표시했습니다. 검색어를 더 구체적으로 입력해 주세요.`;
+          } else if (hiddenSelectedCount) {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다. 이미 선택한 ${hiddenSelectedCount}개는 위 칩에서 관리할 수 있습니다.`;
+          } else {
+            hintEl.textContent = `추가 가능한 결과 ${visibleMatches.length}개가 표시되었습니다.`;
+          }
         }
       }
 
@@ -5622,7 +6120,7 @@ body.protected-export-locked {
               <button type="button" aria-label="${escapeHtml(entry.dept)} 선택 해제" data-dept-remove="${escapeHtml(entry.key)}">×</button>
             </div>
           `).join("")}</div>`
-        : "";
+        : '<div class="dept-finder-selection-empty">아직 선택한 학과가 없습니다. 검색 결과에서 학과를 추가해 주세요.</div>';
 
       openBtn.disabled = selectedEntries.length === 0;
       clearBtn.disabled = selectedEntries.length === 0;
@@ -5632,10 +6130,21 @@ body.protected-export-locked {
       const searchEl = document.getElementById("dept-finder-search");
       const resultsEl = document.getElementById("dept-finder-results");
       const selectedEl = document.getElementById("dept-finder-selected");
+      const modeGroupEl = document.getElementById("dept-finder-mode-group");
       const openBtn = document.getElementById("dept-finder-open-btn");
       const clearBtn = document.getElementById("dept-finder-clear-btn");
       if (searchEl) {
         searchEl.addEventListener("input", () => {
+          renderDeptFinder(records);
+        });
+      }
+      if (modeGroupEl) {
+        modeGroupEl.addEventListener("click", (event) => {
+          const trigger = event.target instanceof Element ? event.target.closest("[data-dept-finder-mode]") : null;
+          if (!trigger) return;
+          const nextMode = trigger.getAttribute("data-dept-finder-mode") || DEFAULT_DEPT_FINDER_GROUPING_MODE;
+          if (nextMode === getDeptFinderGroupingMode()) return;
+          syncDeptFinderSelectionForMode(records, nextMode);
           renderDeptFinder(records);
         });
       }
@@ -5646,7 +6155,11 @@ body.protected-export-locked {
             const searchEl = document.getElementById("dept-finder-search");
             const keyword = safe(searchEl ? searchEl.value : "");
             if (!keyword) return;
-            const matches = getDeptFinderMatches(makeDeptFinderEntries(records), keyword);
+            const entries = makeDeptFinderEntries(records, getDeptFinderGroupingMode());
+            const selectedSet = new Set(filterState.selectedDeptKeys);
+            const matches = getDeptFinderMatches(entries, keyword)
+              .filter((entry) => !selectedSet.has(entry.key))
+              .slice(0, DEPT_SEARCH_RESULT_LIMIT);
             const changed = addDeptFinderSelection(matches.map((entry) => entry.key));
             if (changed) renderDeptFinder(records);
             return;
@@ -5677,7 +6190,7 @@ body.protected-export-locked {
       }
       if (openBtn) {
         openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedDeptEntries(makeDeptFinderEntries(records));
+          const selectedEntries = getSelectedDeptEntries(makeDeptFinderEntries(records, getDeptFinderGroupingMode()));
           if (!selectedEntries.length) return;
           showDeptAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
         });
@@ -6496,7 +7009,7 @@ body.protected-export-locked {
       if (view.type === "univ") {
         detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => r.univ === view.univ));
       } else if (view.type === "deptSelection") {
-        const keySet = new Set((view.entries || []).map((entry) => entry.key));
+        const keySet = new Set((view.entries || []).flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
         detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => keySet.has(buildDeptFinderKey(r.univ, r.dept))));
       } else if (view.type === "apptype") {
         detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => (r.apptype || "미상") === view.value));
@@ -6697,8 +7210,12 @@ body.protected-export-locked {
         type: "deptSelection",
         entries: entries.map((entry) => ({
           key: entry.key,
+          mode: entry.mode,
           univ: entry.univ,
+          primaryUniv: entry.primaryUniv,
+          univCount: entry.univCount,
           dept: entry.dept,
+          matchKeys: Array.isArray(entry.matchKeys) ? [...entry.matchKeys] : undefined,
         })),
       })];
       renderDetailModalView();
