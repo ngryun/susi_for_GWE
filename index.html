@@ -2446,6 +2446,8 @@
     const DETAIL_MODAL_PAGE_SIZE = 200;
     const STUDENT_TREND_PAGE_SIZE = 100;
     const EXCEL_PARSE_CHUNK_SIZE = 1200;
+    const EXCEL_MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB
+    const EXCEL_REQUIRED_COLUMN_LABELS = ["대학명", "모집단위", "전형유형", "세부유형", "결과"];
     const SUBJECT_GRADE_COL_START = 29; // AD
     const SUBJECT_GRADE_COL_END = 33;   // AH
     const CSAT_COLUMN_START = 57; // BF
@@ -2515,6 +2517,9 @@
     const dataState = appState.data;
     const modalState = appState.modal;
     const trendState = appState.trend;
+
+    const SusiApp = (window.SusiApp = window.SusiApp || { preloaded: {} });
+    SusiApp.preloaded = SusiApp.preloaded || {};
     const deptComboState = { open: false, searchText: "", pending: null };
     const analyticsViewState = {
       univTab: { active: false, entries: [], univ: "" },
@@ -2655,8 +2660,9 @@
     }
 
     function getBuildTimestampSource() {
-      if (typeof window.APP_BUILD_UTC === "string" && window.APP_BUILD_UTC.trim()) {
-        return window.APP_BUILD_UTC;
+      const ns = window.SusiApp && window.SusiApp.preloaded;
+      if (ns && typeof ns.buildUtc === "string" && ns.buildUtc.trim()) {
+        return ns.buildUtc;
       }
       if (typeof document.lastModified === "string" && document.lastModified.trim()) {
         return document.lastModified;
@@ -2701,7 +2707,14 @@
     async function handleGenerate() {
       const files = Array.from(fileInput.files);
       if (!files.length) {
-        setStatus("엑셀 파일을 선택해주세요.", true);
+        setStatus("엑셀 파일을 1개 이상 선택해주세요.", true);
+        return;
+      }
+      const oversized = files.filter((f) => f.size > EXCEL_MAX_FILE_BYTES);
+      if (oversized.length) {
+        const limitMb = Math.round(EXCEL_MAX_FILE_BYTES / (1024 * 1024));
+        const names = oversized.map((f) => `${f.name}(${(f.size / 1024 / 1024).toFixed(1)}MB)`).join(", ");
+        setStatus(`파일 크기 제한(${limitMb}MB)을 초과한 파일이 있습니다: ${names}`, true);
         return;
       }
       try {
@@ -2763,7 +2776,7 @@
         const records = allParsed.flat();
         if (!records.length) {
           hideGenerateProgress();
-          setStatus("유효한 데이터가 없습니다. 필수 컬럼을 확인하세요.", true);
+          setStatus(`유효한 데이터가 없습니다. 필수 컬럼(${EXCEL_REQUIRED_COLUMN_LABELS.join(", ")})과 등급 값이 기재되어 있는지 확인하세요.`, true);
           return;
         }
         updateGenerateProgress(
@@ -2807,14 +2820,30 @@
     }
 
     function parseExcel(file, onProgress = null) {
+      const fileLabel = (file && file.name) ? file.name : "파일";
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async (e) => {
           try {
             const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
+            let workbook;
+            try {
+              workbook = XLSX.read(data, { type: "array" });
+            } catch (err) {
+              throw new Error(`${fileLabel}: 엑셀 파일을 읽을 수 없습니다. (${err && err.message ? err.message : "형식이 올바르지 않습니다"})`);
+            }
+            if (!workbook || !Array.isArray(workbook.SheetNames) || !workbook.SheetNames.length) {
+              throw new Error(`${fileLabel}: 시트가 없는 엑셀 파일입니다.`);
+            }
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            if (!sheet) {
+              throw new Error(`${fileLabel}: 첫 번째 시트를 찾을 수 없습니다.`);
+            }
             const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
+            if (allRows.length <= 3) {
+              throw new Error(`${fileLabel}: 데이터 행이 없습니다. (헤더 3행 이후 비어 있음)`);
+            }
+            validateRequiredColumnsInHeaderRows(allRows, fileLabel);
             const rows = allRows.slice(3); // skip first 3 rows
             const csatColumnDescriptors = buildStudentCsatColumnDescriptors(sheet, allRows);
             const subjectGradeDescriptors = buildSubjectGradeDescriptors(sheet, allRows);
@@ -2902,14 +2931,30 @@
               await nextUiPaint();
             }
             const skippedCount = totalRows - records.length;
+            if (!records.length) {
+              throw new Error(`${fileLabel}: 유효한 데이터 행이 없습니다. 필수 컬럼(${EXCEL_REQUIRED_COLUMN_LABELS.join(", ")}) 및 등급 값 누락 여부를 확인하세요.`);
+            }
             resolve({ records, studentCsatByKey, studentSubjectGradeByKey, skippedCount });
           } catch (err) {
             reject(err);
           }
         };
-        reader.onerror = (err) => reject(err);
+        reader.onerror = () => reject(new Error(`${fileLabel}: 파일을 읽는 중 오류가 발생했습니다.`));
         reader.readAsArrayBuffer(file);
       });
+    }
+
+    function validateRequiredColumnsInHeaderRows(allRows, fileLabel) {
+      const headerText = allRows
+        .slice(0, 3)
+        .flatMap((row) => (Array.isArray(row) ? row : []))
+        .map((cell) => String(cell ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      const missing = EXCEL_REQUIRED_COLUMN_LABELS.filter((label) => !headerText.includes(label));
+      if (missing.length) {
+        throw new Error(`${fileLabel}: 필수 컬럼이 누락되었습니다 → ${missing.join(", ")}`);
+      }
     }
 
     function getSheetCellText(sheet, rowIndex, colIndex) {
@@ -3428,8 +3473,10 @@
       return `
 (() => {
   const encryptedPayload = ${JSON.stringify(encryptedPayload)};
-  window.APP_BUILD_UTC = new Date().toISOString();
-  window.PRELOADED_SHARED = true;
+  const ns = (window.SusiApp = window.SusiApp || { preloaded: {} });
+  ns.preloaded = ns.preloaded || {};
+  ns.preloaded.buildUtc = new Date().toISOString();
+  ns.preloaded.shared = true;
 
   const style = document.createElement("style");
   style.textContent = \`
@@ -3568,16 +3615,16 @@ body.protected-export-locked {
         );
         const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
         const payload = JSON.parse(new TextDecoder().decode(decrypted));
-        window.PRELOADED_DATA = payload.analysisData;
-        window.PRELOADED_STUDENT_CSAT = payload.studentCsatData || {};
-        window.PRELOADED_SUBJECT_GRADE = payload.subjectGradeData || {};
-        window.PRELOADED_UI_STATE = payload.uiState;
+        ns.preloaded.data = payload.analysisData;
+        ns.preloaded.studentCsat = payload.studentCsatData || {};
+        ns.preloaded.subjectGrade = payload.subjectGradeData || {};
+        ns.preloaded.uiState = payload.uiState;
         document.body.classList.remove("protected-export-locked");
         overlay.remove();
 
         const initializeDecryptedView = async () => {
-          if (typeof window.initializePreloadedReport === "function") {
-            await window.initializePreloadedReport();
+          if (ns && typeof ns.bootstrap === "function") {
+            await ns.bootstrap();
           }
         };
 
@@ -3808,12 +3855,16 @@ body.protected-export-locked {
         preloadScript.textContent = escapeInlineScriptContent(buildProtectedHtmlBootstrap(encryptedPayload));
       } else {
         preloadScript.textContent = [
-          `window.APP_BUILD_UTC = ${serializeForInlineScript(new Date().toISOString())};`,
-          "window.PRELOADED_SHARED = true;",
-          `window.PRELOADED_DATA = ${serializeForInlineScript(sanitizeRecordsForShared(records))};`,
-          `window.PRELOADED_STUDENT_CSAT = ${serializeForInlineScript(studentCsatData)};`,
-          `window.PRELOADED_SUBJECT_GRADE = ${serializeForInlineScript(subjectGradeData)};`,
-          `window.PRELOADED_UI_STATE = ${serializeForInlineScript(uiState)};`,
+          "(() => {",
+          "  const ns = (window.SusiApp = window.SusiApp || { preloaded: {} });",
+          "  ns.preloaded = ns.preloaded || {};",
+          `  ns.preloaded.buildUtc = ${serializeForInlineScript(new Date().toISOString())};`,
+          "  ns.preloaded.shared = true;",
+          `  ns.preloaded.data = ${serializeForInlineScript(sanitizeRecordsForShared(records))};`,
+          `  ns.preloaded.studentCsat = ${serializeForInlineScript(studentCsatData)};`,
+          `  ns.preloaded.subjectGrade = ${serializeForInlineScript(subjectGradeData)};`,
+          `  ns.preloaded.uiState = ${serializeForInlineScript(uiState)};`,
+          "})();",
         ].join("\n");
       }
       const mainScript = Array.from(doc.querySelectorAll("script"))
@@ -4402,12 +4453,19 @@ body.protected-export-locked {
       const el = document.getElementById(containerId);
       if (!el) return;
       const yearLabels = years.map(String);
+      const counts = new Map();
+      years.forEach((y) => counts.set(y, { pass: 0, wait: 0, fail: 0 }));
+      allRecords.forEach((r) => {
+        const bucket = counts.get(r.academic_year);
+        if (!bucket) return;
+        if (r.result === "합격") bucket.pass += 1;
+        else if (r.result === "충원합격") bucket.wait += 1;
+        else if (r.result === "불합격") bucket.fail += 1;
+      });
       const passArr = [], waitArr = [], failArr = [], rateArr = [];
-      years.forEach(y => {
-        const recs = allRecords.filter(r => r.academic_year === y);
-        const pass = recs.filter(r => r.result === "합격").length;
-        const wait = recs.filter(r => r.result === "충원합격").length;
-        const fail = recs.filter(r => r.result === "불합격").length;
+      years.forEach((y) => {
+        const b = counts.get(y) || { pass: 0, wait: 0, fail: 0 };
+        const pass = b.pass, wait = b.wait, fail = b.fail;
         const total = pass + wait + fail;
         passArr.push(pass); waitArr.push(wait); failArr.push(fail);
         rateArr.push(total ? ((pass + wait) / total * 100) : 0);
@@ -4435,12 +4493,18 @@ body.protected-export-locked {
       if (!el) return;
       const traces = [];
       const colors = { "합격": "#059669", "충원합격": "#d97706", "불합격": "#dc2626" };
-      ["합격", "충원합격", "불합격"].forEach(result => {
-        const x = [], y = [];
-        years.forEach(yr => {
-          allRecords.filter(r => r.academic_year === yr && r.result === result && r.all_subj_grade !== null)
-            .forEach(r => { x.push(String(yr)); y.push(r.all_subj_grade); });
-        });
+      const yearSet = new Set(years);
+      const buckets = { "합격": { x: [], y: [] }, "충원합격": { x: [], y: [] }, "불합격": { x: [], y: [] } };
+      allRecords.forEach((r) => {
+        if (!yearSet.has(r.academic_year)) return;
+        if (r.all_subj_grade === null) return;
+        const bucket = buckets[r.result];
+        if (!bucket) return;
+        bucket.x.push(String(r.academic_year));
+        bucket.y.push(r.all_subj_grade);
+      });
+      ["합격", "충원합격", "불합격"].forEach((result) => {
+        const { x, y } = buckets[result];
         traces.push({ x, y, type: "box", name: result, marker: { color: colors[result] }, boxpoints: false });
       });
       const layout = {
@@ -4655,7 +4719,7 @@ body.protected-export-locked {
 
     function buildUniversityDetailSection(univ, index, startPlotId) {
       let plotCounter = startPlotId;
-      let html = `<div class="dept-container"><div class="dept-header">${univ}</div>`;
+      let html = `<div class="dept-container"><div class="dept-header">${escapeHtml(univ)}</div>`;
 
       const apptypeMap = index.byUnivApptype.get(univ) || new Map();
       const apptypesAll = sortedMapKeys(apptypeMap);
@@ -4665,7 +4729,7 @@ body.protected-export-locked {
           const subset = apptypeMap.get(ap) || [];
           const block = buildPlotBlock(subset, plotCounter, `${ap}`, true);
           html += `<div class="subtype-container level-1">
-              <div class="subtype-header is-medium">${ap}</div>
+              <div class="subtype-header is-medium">${escapeHtml(ap)}</div>
               ${block.html}
             </div>`;
           renderState.plotRegistryData[plotCounter] = block.data;
@@ -4682,7 +4746,7 @@ body.protected-export-locked {
           const subset = subtypeMap.get(st) || [];
           const block = buildPlotBlock(subset, plotCounter, `${st}`, true);
           html += `<div class="subtype-container level-1">
-              <div class="subtype-header is-medium">${st}</div>
+              <div class="subtype-header is-medium">${escapeHtml(st)}</div>
               ${block.html}
             </div>`;
           renderState.plotRegistryData[plotCounter] = block.data;
@@ -4697,14 +4761,14 @@ body.protected-export-locked {
       univDepts.forEach((dept, dIdx) => {
         const deptSubtypeMap = deptSubtypeByUniv.get(dept) || new Map();
         html += `<div class="subtype-container">
-            <div class="subtype-header is-dept">${dIdx + 1}) ${dept}</div>`;
+            <div class="subtype-header is-dept">${dIdx + 1}) ${escapeHtml(dept)}</div>`;
         const deptSubtypes = sortedMapKeys(deptSubtypeMap);
         deptSubtypes.forEach((st, sIdx) => {
           const subset = deptSubtypeMap.get(st) || [];
           if (!subset.length) return;
           const block = buildPlotBlock(subset, plotCounter, `${st}`, true);
           html += `<div class="subtype-container level-2">
-              <div class="subtype-header is-small">${sIdx + 1}) ${st}</div>
+              <div class="subtype-header is-small">${sIdx + 1}) ${escapeHtml(st)}</div>
               ${block.html}
             </div>`;
           renderState.plotRegistryData[plotCounter] = block.data;
@@ -7111,7 +7175,7 @@ body.protected-export-locked {
         const pct = clampPct(s.allPassRate);
         const registrationPct = clampPct(s.registrationRate);
         return `<article class="apptype-chip" data-detail-view="${escapeHtml(s.detailView || "")}" data-detail-value="${escapeHtml(s.detailValue || s.label || "")}" data-detail-label="${escapeHtml(s.label || "")}">
-          <h4 class="apptype-chip-title">${s.label}</h4>
+          <h4 class="apptype-chip-title">${escapeHtml(s.label)}</h4>
           <div class="apptype-chip-count">${s.total.toLocaleString()}건<span class="apptype-chip-count-pct">${detailRecords.length ? (s.total / detailRecords.length * 100).toFixed(1) + "%" : ""}</span></div>
           <div class="apptype-chip-rate-row">
             <span class="apptype-chip-rate-label">합격률(충원포함)</span>
@@ -8461,17 +8525,16 @@ body.protected-export-locked {
     }
 
     function initializePreloadedReport() {
-      if (!Array.isArray(window.PRELOADED_DATA) || !window.PRELOADED_DATA.length) return;
-      const normalizedRecords = normalizeLoadedRecords(window.PRELOADED_DATA);
+      const pre = (window.SusiApp && window.SusiApp.preloaded) || {};
+      if (!Array.isArray(pre.data) || !pre.data.length) return;
+      const normalizedRecords = normalizeLoadedRecords(pre.data);
       dataState.loadedRecords = normalizedRecords;
-      dataState.studentCsatByKey = restoreStudentCsatMap(window.PRELOADED_STUDENT_CSAT);
-      dataState.studentSubjectGradeByKey = restoreSubjectGradeMap(window.PRELOADED_SUBJECT_GRADE);
+      dataState.studentCsatByKey = restoreStudentCsatMap(pre.studentCsat);
+      dataState.studentSubjectGradeByKey = restoreSubjectGradeMap(pre.subjectGrade);
       const years = getAvailableYears(normalizedRecords);
       filterState.yearFilter = "all";
       filterState.locationFilter = "all";
-      const preloadedState = window.PRELOADED_UI_STATE && typeof window.PRELOADED_UI_STATE === "object"
-        ? window.PRELOADED_UI_STATE
-        : {};
+      const preloadedState = pre.uiState && typeof pre.uiState === "object" ? pre.uiState : {};
       renderFullReport(
         normalizedRecords,
         "",
@@ -8486,7 +8549,7 @@ body.protected-export-locked {
       setLandingVisibility(false);
     }
 
-    window.initializePreloadedReport = initializePreloadedReport;
+    SusiApp.bootstrap = initializePreloadedReport;
     updateBuildInfoText();
     initializePreloadedReport();
   </script>
