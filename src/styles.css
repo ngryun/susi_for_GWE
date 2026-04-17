@@ -96,6 +96,21 @@
       align-items: center;
     }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .privacy-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      background: var(--success-light);
+      border: 1px solid var(--success-border);
+      color: var(--success);
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 500;
+    }
+    .privacy-notice strong { font-weight: 700; }
     input[type="file"] {
       flex: 1;
       min-width: 200px;
@@ -506,6 +521,42 @@
       min-height: 76px;
       font-weight: 600;
     }
+    .year-trend-table td[data-apptype-click],
+    .year-univ-trend-table td[data-univ-click] {
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .year-trend-table td[data-apptype-click]:hover,
+    .year-univ-trend-table td[data-univ-click]:hover {
+      background: rgba(37, 99, 235, 0.06);
+    }
+
+    /* ── Analytics sub-view (대학별/학과별 분석 뷰) ── */
+    .analytics-back-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .analytics-back-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg);
+      color: var(--text-secondary); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    .analytics-back-btn:hover { background: var(--card-bg); color: var(--text-primary); }
+    .analytics-view-title {
+      font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.3;
+    }
+    .analytics-view-subtitle {
+      font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-top: 2px;
+    }
+    .summary-link-sub {
+      border: 1px solid var(--border); background: var(--bg);
+      padding: 2px 8px; border-radius: 4px; font-size: 11px;
+      color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+      transition: background .15s, color .15s;
+    }
+    .summary-link-sub:hover { background: var(--card-bg); color: var(--text-primary); }
+
     .summary-link {
       border: none;
       background: transparent;
@@ -524,6 +575,44 @@
       display: grid;
       gap: 10px;
       margin-top: 16px;
+    }
+    .dept-finder-toolbar {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .dept-finder-selection-panel {
+      margin-top: 16px;
+      padding: 14px 16px 16px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(15, 118, 110, 0.06), rgba(255, 255, 255, 0.92));
+    }
+    .dept-finder-selection-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .dept-finder-selection-copy {
+      min-width: 0;
+      flex: 1 1 240px;
+    }
+    .dept-finder-selection-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #115e59;
+      line-height: 1.4;
+    }
+    .dept-finder-selection-meta {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      line-height: 1.45;
     }
     .dept-finder-results-head {
       display: flex;
@@ -578,7 +667,13 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 16px;
+      margin-top: 12px;
+    }
+    .dept-finder-selection-empty {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
     }
     .dept-finder-chip {
       display: inline-flex;
@@ -605,7 +700,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 16px;
     }
     .dept-finder-hint {
       margin-top: 16px;
@@ -1073,6 +1167,65 @@
       border-color: #2563eb;
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
     }
+    /* Dept combo box (multi-select with search) */
+    .dept-combo { position: relative; min-width: 220px; max-width: 420px; flex-shrink: 1; }
+    .dept-combo-input-area {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      min-height: 36px; padding: 4px 8px;
+      border: 1px solid #cbd5e1; border-radius: 10px;
+      background: #fff; cursor: text;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .dept-combo-input-area.is-open {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.14);
+    }
+    .dept-combo-tag {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 2px 4px 2px 8px; border-radius: 6px;
+      background: #e0e7ff; color: #3730a3;
+      font-size: 12px; font-weight: 500; white-space: nowrap; line-height: 1.5;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .dept-combo-tag-label { overflow: hidden; text-overflow: ellipsis; }
+    .dept-combo-tag-remove {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; flex-shrink: 0;
+      border: none; border-radius: 50%; background: transparent;
+      color: #6366f1; cursor: pointer; font-size: 13px; line-height: 1; padding: 0;
+    }
+    .dept-combo-tag-remove:hover { background: #c7d2fe; color: #4338ca; }
+    .dept-combo-input {
+      flex: 1 1 80px; min-width: 60px; border: none; outline: none;
+      background: transparent; font: inherit; font-size: 13px;
+      color: var(--text-primary); padding: 3px 0;
+    }
+    .dept-combo-input::placeholder { color: #94a3b8; }
+    .dept-combo-dropdown {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      max-height: 240px; overflow-y: auto;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(15,23,42,.12); z-index: 110;
+    }
+    .dept-combo-dropdown.is-open { display: block; }
+    .dept-combo-option {
+      padding: 7px 12px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background .1s;
+    }
+    .dept-combo-option:hover { background: #f1f5f9; }
+    .dept-combo-option.is-selected { background: #eef2ff; color: #4338ca; font-weight: 600; }
+    .dept-combo-option .check-icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+    .dept-combo-empty { padding: 14px 12px; font-size: 13px; color: #94a3b8; text-align: center; }
+    .dept-combo-clear {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 3px 8px; border: none; border-radius: 6px;
+      background: #f1f5f9; color: #64748b; cursor: pointer;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+      transition: background .15s;
+    }
+    .dept-combo-clear:hover { background: #e2e8f0; color: #334155; }
     .detail-table-wrap {
       position: relative;
       isolation: isolate;
@@ -1112,6 +1265,14 @@
       font-variant-numeric: tabular-nums;
       vertical-align: middle;
       overflow: visible;
+    }
+    .detail-table th.detail-align-center,
+    .detail-table td.detail-align-center {
+      text-align: center;
+    }
+    .detail-table th.detail-align-right,
+    .detail-table td.detail-align-right {
+      text-align: right;
     }
     .detail-table col.detail-col-class { width: 56px; }
     .detail-table col.detail-col-region { width: 92px; }
@@ -1423,6 +1584,25 @@
       border-color: #cbd5e1;
       color: #334155;
     }
+    /* 교과별 내신 등급 pill */
+    .subject-grade-pill {
+      display: inline-flex; align-items: center;
+      padding: 2px 10px; border-radius: 8px;
+      font-size: 13px; font-weight: 700; line-height: 1.5;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid rgba(148,163,184,0.26);
+      background: #fff; color: #0f172a;
+    }
+    .subject-grade-pill.is-grade-1 { background: #d1fae5; border-color: #10b981; color: #047857; }
+    .subject-grade-pill.is-grade-2 { background: #dcfce7; border-color: #22c55e; color: #15803d; }
+    .subject-grade-pill.is-grade-3 { background: #ccfbf1; border-color: #14b8a6; color: #0f766e; }
+    .subject-grade-pill.is-grade-4 { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
+    .subject-grade-pill.is-grade-5 { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
+    .subject-grade-pill.is-grade-6 { background: #ffedd5; border-color: #f97316; color: #c2410c; }
+    .subject-grade-pill.is-grade-7 { background: #fce7f3; border-color: #ec4899; color: #be185d; }
+    .subject-grade-pill.is-grade-8 { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+    .subject-grade-pill.is-grade-9 { background: #e2e8f0; border-color: #64748b; color: #334155; }
+    .subject-grade-pill.is-grade-unknown { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
     .detail-csat-list {
       margin-top: 8px;
     }
@@ -1548,12 +1728,18 @@
     }
 
     /* Year Filter Bar */
+    .global-filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 20px;
+      margin-top: 10px;
+      padding: 6px 0 2px;
+    }
     .year-filter-bar {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-top: 10px;
-      padding: 8px 0 4px;
     }
     .year-filter-label {
       font-size: 12px;
@@ -1659,37 +1845,101 @@
       gap: 6px;
       flex-wrap: wrap;
     }
+    .chart-export-menu {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
     .chart-action-btn {
+      border: 0;
+      background: transparent;
+      color: #c2cad5;
+      padding: 4px;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+    }
+    .chart-action-btn:hover {
+      background: rgba(148, 163, 184, 0.12);
+      color: #94a3b8;
+    }
+    .chart-action-btn.is-open {
+      background: rgba(148, 163, 184, 0.16);
+      color: #8793a3;
+    }
+    .chart-action-btn:focus-visible {
+      outline: 2px solid rgba(148, 163, 184, 0.28);
+      outline-offset: 2px;
+    }
+    .chart-action-btn:disabled {
+      opacity: 0.48;
+      cursor: progress;
+    }
+    .chart-action-btn-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+    }
+    .chart-action-btn.is-icon-only {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+    }
+    .chart-action-icon {
+      width: 15px;
+      height: 15px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+    .chart-export-popover[hidden] {
+      display: none;
+    }
+    .chart-export-popover {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 132px;
+      padding: 6px;
       border: 1px solid #cbd5e1;
-      background: #ffffff;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 12;
+    }
+    .chart-export-option {
+      width: 100%;
+      border: none;
+      background: transparent;
       color: #334155;
-      padding: 6px 10px;
-      border-radius: 999px;
+      padding: 8px 10px;
+      border-radius: 10px;
       font: inherit;
       font-size: 12px;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1.3;
+      text-align: left;
       cursor: pointer;
-      transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+      transition: background 0.15s ease, color 0.15s ease;
     }
-    .chart-action-btn[data-plot-export-format="svg"] {
-      border-color: #bfdbfe;
-      background: #eff6ff;
+    .chart-export-option:hover {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .chart-export-option[data-plot-export-format="svg"] {
       color: #1d4ed8;
     }
-    .chart-action-btn:hover {
-      border-color: #94a3b8;
-      background: #f8fafc;
-      transform: translateY(-1px);
-    }
-    .chart-action-btn[data-plot-export-format="svg"]:hover {
-      border-color: #93c5fd;
-      background: #dbeafe;
-    }
-    .chart-action-btn:disabled {
+    .chart-export-option:disabled {
       opacity: 0.68;
       cursor: progress;
-      transform: none;
     }
     .card-note-emphasis {
       display: block;
@@ -1779,6 +2029,16 @@
       letter-spacing: -0.03em;
       color: var(--text-primary);
       font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .apptype-chip-count-pct {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      letter-spacing: 0;
       font-variant-numeric: tabular-nums;
     }
     .apptype-chip-rate-row {
@@ -1870,6 +2130,15 @@
       .dept-finder-item button {
         width: 100%;
       }
+      .dept-finder-selection-head {
+        align-items: stretch;
+      }
+      .dept-finder-actions {
+        width: 100%;
+      }
+      .dept-finder-actions button {
+        flex: 1 1 0;
+      }
       .dept-finder-results-head {
         align-items: stretch;
       }
@@ -1895,6 +2164,7 @@
         width: 100%;
         max-width: none;
       }
+      .dept-combo { min-width: 0; max-width: none; width: 100%; }
       .detail-csat-grid {
         grid-template-columns: 1fr;
       }
