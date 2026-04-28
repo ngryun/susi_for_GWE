@@ -145,6 +145,10 @@
     const EXCEL_PARSE_CHUNK_SIZE = 1200;
     const EXCEL_MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB
     const EXCEL_REQUIRED_COLUMN_LABELS = ["대학명", "모집단위", "전형유형", "세부유형", "결과"];
+    const LEGACY_EXCEL_DATA_START_ROW_INDEX = 3;
+    const SCHOOL_EXCEL_DATA_START_ROW_INDEX = 2;
+    const SCHOOL_SUBJECT_GRADE_COLUMN_COUNT = 28;
+    const SCHOOL_CSAT_COLUMN_COUNT = 20;
     const SUBJECT_GRADE_COL_START = 29; // AD
     const SUBJECT_GRADE_COL_END = 33;   // AH
     const CSAT_COLUMN_START = 57; // BF
@@ -537,40 +541,23 @@
               throw new Error(`${fileLabel}: 첫 번째 시트를 찾을 수 없습니다.`);
             }
             const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
-            if (allRows.length <= 3) {
-              throw new Error(`${fileLabel}: 데이터 행이 없습니다. (헤더 3행 이후 비어 있음)`);
+            const layout = detectExcelLayout(sheet, allRows);
+            if (allRows.length <= layout.dataStartIndex) {
+              throw new Error(`${fileLabel}: 데이터 행이 없습니다. (헤더 이후 비어 있음)`);
             }
-            validateRequiredColumnsInHeaderRows(allRows, fileLabel);
-            const rows = allRows.slice(3); // skip first 3 rows
-            const csatColumnDescriptors = buildStudentCsatColumnDescriptors(sheet, allRows);
-            const subjectGradeDescriptors = buildSubjectGradeDescriptors(sheet, allRows);
-
-            const COL = {
-              school_name: 0,       // A: 고등학교명 (업로드 직후 폐기)
-              student_key: 1,       // B: 학생 고유코드
-              academic_year: 2,     // C: 학년도
-              school_location: 3,   // D: 소재지
-              is_rural: 5,          // F: 농어촌여부
-              region: 8,            // I: 대학 지역
-              univ: 9,              // J: 대학명
-              apptype: 11,          // L: 전형유형
-              subtype: 13,          // N: 세부유형
-              dept: 15,             // P: 모집단위
-              enrollment_count: 16, // Q: 모집인원
-              selection_type: 17,   // R: 선발유형
-              conv: 21,             // V: 환산등급(일반교과)
-              conv_ext: 22,         // W: 환산등급(일반+진로)
-              result: 24,           // Y: 결과
-              registered_yn: 27,    // AB: 등록여부
-              all_subj: 34,         // AI: 전교과등급
-            };
+            validateRequiredColumnsInHeaderRows(allRows, fileLabel, layout);
+            const rows = allRows.slice(layout.dataStartIndex);
+            const csatColumnDescriptors = buildStudentCsatColumnDescriptors(sheet, allRows, layout.csatRange);
+            const subjectGradeDescriptors = buildSubjectGradeDescriptors(sheet, allRows, layout.subjectGradeRange);
+            const COL = layout.columns;
+            const fallbackAcademicYear = resolveAcademicYearFallbackFromFilename(fileLabel, layout);
 
             const records = [];
             const studentCsatByKey = new Map();
             const studentSubjectGradeByKey = new Map();
             const totalRows = rows.length;
             rows.forEach((row) => {
-              if (Array.isArray(row) && row.length > COL.school_name) {
+              if (Array.isArray(row) && Number.isInteger(COL.school_name) && row.length > COL.school_name) {
                 row[COL.school_name] = "";
               }
             });
@@ -581,24 +568,24 @@
               const end = Math.min(start + EXCEL_PARSE_CHUNK_SIZE, totalRows);
               for (let rowIndex = start; rowIndex < end; rowIndex++) {
                 const row = rows[rowIndex];
-                const studentKeyRaw = safe(row[COL.student_key]);
+                const studentKeyRaw = buildStudentKeyFromRow(row, COL) || `S${String(records.length + 1).padStart(5, "0")}`;
                 const rec = normalizeLoadedRecord({
-                  student_key: studentKeyRaw || `S${String(records.length + 1).padStart(5, "0")}`,
-                  academic_year: parseAcademicYear(row[COL.academic_year]),
-                  school_location: safe(row[COL.school_location]),
-                  is_rural: parseIsRural(row[COL.is_rural]),
-                  region: safe(row[COL.region]),
-                  univ: safe(row[COL.univ]),
-                  apptype: safe(row[COL.apptype]),
-                  subtype: safe(row[COL.subtype]),
-                  dept: safe(row[COL.dept]),
-                  enrollment_count: parseEnrollmentCount(row[COL.enrollment_count]),
-                  selection_type: safe(row[COL.selection_type]),
-                  result: safe(row[COL.result]),
-                  registered_yn: parseRegistration(row[COL.registered_yn]),
-                  all_subj_grade: parseGrade(row[COL.all_subj]),
-                  conv_grade: parseGrade(row[COL.conv]),
-                  conv_grade_ext: parseGrade(row[COL.conv_ext]),
+                  student_key: studentKeyRaw,
+                  academic_year: readAcademicYearFromRow(row, COL, fallbackAcademicYear),
+                  school_location: safe(readRowValue(row, COL.school_location)),
+                  is_rural: parseIsRural(readRowValue(row, COL.is_rural)),
+                  region: safe(readRowValue(row, COL.region)),
+                  univ: safe(readRowValue(row, COL.univ)),
+                  apptype: safe(readRowValue(row, COL.apptype)),
+                  subtype: safe(readRowValue(row, COL.subtype)),
+                  dept: safe(readRowValue(row, COL.dept)),
+                  enrollment_count: parseEnrollmentCount(readRowValue(row, COL.enrollment_count)),
+                  selection_type: safe(readRowValue(row, COL.selection_type)),
+                  result: safe(readRowValue(row, COL.result)),
+                  registered_yn: parseRegistration(readRowValue(row, COL.registered_yn)),
+                  all_subj_grade: parseGrade(readRowValue(row, COL.all_subj)),
+                  conv_grade: parseGrade(readRowValue(row, COL.conv)),
+                  conv_grade_ext: parseGrade(readRowValue(row, COL.conv_ext)),
                 }, records.length);
                 if (!rec.result || !rec.univ || !rec.dept || !rec.subtype || !rec.apptype) continue;
                 if (rec.all_subj_grade === null && rec.conv_grade === null) continue;
@@ -641,7 +628,118 @@
       });
     }
 
-    function validateRequiredColumnsInHeaderRows(allRows, fileLabel) {
+    function createLegacyExcelLayout() {
+      return {
+        type: "legacy",
+        dataStartIndex: LEGACY_EXCEL_DATA_START_ROW_INDEX,
+        columns: {
+          school_name: 0,       // A: 고등학교명 (업로드 직후 폐기)
+          student_key: 1,       // B: 학생 고유코드
+          academic_year: 2,     // C: 학년도
+          school_location: 3,   // D: 소재지
+          is_rural: 5,          // F: 농어촌여부
+          region: 8,            // I: 대학 지역
+          univ: 9,              // J: 대학명
+          apptype: 11,          // L: 전형유형
+          subtype: 13,          // N: 세부유형
+          dept: 15,             // P: 모집단위
+          enrollment_count: 16, // Q: 모집인원
+          selection_type: 17,   // R: 선발유형
+          conv: 21,             // V: 환산등급(일반교과)
+          conv_ext: 22,         // W: 환산등급(일반+진로)
+          result: 24,           // Y: 결과
+          registered_yn: 27,    // AB: 등록여부
+          all_subj: 34,         // AI: 전교과등급
+        },
+        subjectGradeRange: { start: SUBJECT_GRADE_COL_START, end: SUBJECT_GRADE_COL_END },
+        csatRange: { start: CSAT_COLUMN_START, end: CSAT_COLUMN_END },
+      };
+    }
+
+    function detectExcelLayout(sheet, allRows = []) {
+      if (!isSchoolExcelLayout(sheet, allRows)) return createLegacyExcelLayout();
+
+      const subjectGradeRange = findSchoolSubjectGradeRange(sheet, allRows);
+      const csatRange = subjectGradeRange
+        ? {
+          start: subjectGradeRange.end + 1,
+          end: subjectGradeRange.end + SCHOOL_CSAT_COLUMN_COUNT,
+          carryTop: true,
+        }
+        : { start: 1, end: 0 };
+      const convCol = firstValidColumn(
+        findTopHeaderColumn(sheet, allRows, ["내등급(환산)"]),
+        findHeaderPairColumn(sheet, allRows, ["환산등급"], ["일반교과"], { allowCarriedTop: true })
+      );
+      const columns = {
+        school_name: null,
+        student_key: null,
+        grade: 0,
+        class_no: 1,
+        student_no: 2,
+        academic_year: findTopHeaderColumn(sheet, allRows, ["학년도"]),
+        school_location: findTopHeaderColumn(sheet, allRows, ["소재지"]),
+        is_rural: firstValidColumn(
+          findTopHeaderColumn(sheet, allRows, ["농어촌여부"]),
+          findTopHeaderColumn(sheet, allRows, ["농어촌"])
+        ),
+        region: findTopHeaderColumn(sheet, allRows, ["지역"]),
+        univ: findTopHeaderColumn(sheet, allRows, ["대학명"]),
+        apptype: findTopHeaderColumn(sheet, allRows, ["전형유형"]),
+        subtype: findTopHeaderColumn(sheet, allRows, ["세부유형"]),
+        dept: findTopHeaderColumn(sheet, allRows, ["모집단위"]),
+        enrollment_count: findTopHeaderColumn(sheet, allRows, ["모집인원"]),
+        selection_type: findTopHeaderColumn(sheet, allRows, ["선발유형"]),
+        conv: convCol,
+        conv_ext: findHeaderPairColumn(sheet, allRows, ["환산등급"], ["환산(일반+진로)"], { allowCarriedTop: true }),
+        result: firstValidColumn(
+          findHeaderPairColumn(sheet, allRows, ["합격결과"], ["최종단계"], { allowCarriedTop: true }),
+          findHeaderColumnInRows(sheet, allRows, [0], ["최종단계"]),
+          findTopHeaderColumn(sheet, allRows, ["결과"])
+        ),
+        registered_yn: findTopHeaderColumn(sheet, allRows, ["등록여부"]),
+        all_subj: findHeaderPairColumn(sheet, allRows, ["전교과"], ["100"], { allowCarriedTop: true }),
+      };
+      const missingRequiredLabels = [
+        ["학년", columns.grade],
+        ["반", columns.class_no],
+        ["번호", columns.student_no],
+        ["대학명", columns.univ],
+        ["모집단위", columns.dept],
+        ["전형유형", columns.apptype],
+        ["세부유형", columns.subtype],
+        ["결과", columns.result],
+      ]
+        .filter(([, colIndex]) => !isValidColumnIndex(colIndex))
+        .map(([label]) => label);
+      if (!isValidColumnIndex(columns.all_subj) && !isValidColumnIndex(columns.conv)) {
+        missingRequiredLabels.push("전교과/100 또는 내등급(환산)");
+      }
+
+      return {
+        type: "school",
+        dataStartIndex: SCHOOL_EXCEL_DATA_START_ROW_INDEX,
+        columns,
+        subjectGradeRange: subjectGradeRange || { start: 1, end: 0 },
+        csatRange,
+        missingRequiredLabels,
+      };
+    }
+
+    function isSchoolExcelLayout(sheet, allRows = []) {
+      return headerMatches(getMergedHeaderValue(sheet, allRows, 0, 0), "학년")
+        && headerMatches(getMergedHeaderValue(sheet, allRows, 0, 1), "반")
+        && headerMatches(getMergedHeaderValue(sheet, allRows, 0, 2), "번호");
+    }
+
+    function validateRequiredColumnsInHeaderRows(allRows, fileLabel, layout = null) {
+      if (layout && layout.type === "school") {
+        const missing = Array.isArray(layout.missingRequiredLabels) ? layout.missingRequiredLabels : [];
+        if (missing.length) {
+          throw new Error(`${fileLabel}: 필수 컬럼이 누락되었습니다 → ${missing.join(", ")}`);
+        }
+        return;
+      }
       const headerText = allRows
         .slice(0, 3)
         .flatMap((row) => (Array.isArray(row) ? row : []))
@@ -678,12 +776,124 @@
       return getSheetCellText(sheet, rowIndex, colIndex);
     }
 
-    function buildStudentCsatColumnDescriptors(sheet, headerRows = []) {
+    function getCarriedHeaderValue(sheet, headerRows, rowIndex, colIndex, minColIndex = 0) {
+      const directValue = getMergedHeaderValue(sheet, headerRows, rowIndex, colIndex);
+      if (directValue) return directValue;
+      for (let currentCol = colIndex - 1; currentCol >= minColIndex; currentCol -= 1) {
+        const carriedValue = getMergedHeaderValue(sheet, headerRows, rowIndex, currentCol)
+          || getSheetCellText(sheet, rowIndex, currentCol);
+        if (carriedValue) return carriedValue;
+      }
+      return "";
+    }
+
+    function normalizeHeaderText(value) {
+      return safe(value)
+        .replace(/[（]/g, "(")
+        .replace(/[）]/g, ")")
+        .replace(/\s+/g, "")
+        .toLowerCase();
+    }
+
+    function headerMatches(value, expected) {
+      return normalizeHeaderText(value) === normalizeHeaderText(expected);
+    }
+
+    function headerMatchesAny(value, expectedValues = []) {
+      return expectedValues.some((expected) => headerMatches(value, expected));
+    }
+
+    function isValidColumnIndex(colIndex) {
+      return Number.isInteger(colIndex) && colIndex >= 0;
+    }
+
+    function firstValidColumn(...colIndexes) {
+      const found = colIndexes.find((colIndex) => isValidColumnIndex(colIndex));
+      return isValidColumnIndex(found) ? found : null;
+    }
+
+    function getMaxColumnIndex(sheet, allRows = []) {
+      let maxColumnIndex = 0;
+      allRows.forEach((row) => {
+        if (Array.isArray(row) && row.length) {
+          maxColumnIndex = Math.max(maxColumnIndex, row.length - 1);
+        }
+      });
+      if (sheet && sheet["!ref"]) {
+        try {
+          const range = XLSX.utils.decode_range(sheet["!ref"]);
+          maxColumnIndex = Math.max(maxColumnIndex, range.e.c);
+        } catch (err) {
+          // Ignore malformed ranges; row lengths still provide a safe bound.
+        }
+      }
+      return maxColumnIndex;
+    }
+
+    function findTopHeaderColumn(sheet, headerRows = [], labels = []) {
+      const maxColumnIndex = getMaxColumnIndex(sheet, headerRows);
+      for (let colIndex = 0; colIndex <= maxColumnIndex; colIndex += 1) {
+        if (headerMatchesAny(getMergedHeaderValue(sheet, headerRows, 0, colIndex), labels)) {
+          return colIndex;
+        }
+      }
+      return null;
+    }
+
+    function findHeaderColumnInRows(sheet, headerRows = [], rowIndexes = [], labels = []) {
+      const maxColumnIndex = getMaxColumnIndex(sheet, headerRows);
+      for (let colIndex = 0; colIndex <= maxColumnIndex; colIndex += 1) {
+        for (let i = 0; i < rowIndexes.length; i += 1) {
+          const rowIndex = rowIndexes[i];
+          if (headerMatchesAny(getMergedHeaderValue(sheet, headerRows, rowIndex, colIndex), labels)) {
+            return colIndex;
+          }
+        }
+      }
+      return null;
+    }
+
+    function findHeaderPairColumn(sheet, headerRows = [], topLabels = [], detailLabels = [], options = {}) {
+      const maxColumnIndex = getMaxColumnIndex(sheet, headerRows);
+      const detailRows = Array.isArray(options.detailRows) && options.detailRows.length ? options.detailRows : [1, 2];
+      for (let colIndex = 0; colIndex <= maxColumnIndex; colIndex += 1) {
+        const topValue = options.allowCarriedTop
+          ? getCarriedHeaderValue(sheet, headerRows, 0, colIndex)
+          : getMergedHeaderValue(sheet, headerRows, 0, colIndex);
+        if (!headerMatchesAny(topValue, topLabels)) continue;
+        for (let i = 0; i < detailRows.length; i += 1) {
+          const rowIndex = detailRows[i];
+          const detailValue = options.allowCarriedDetail
+            ? getCarriedHeaderValue(sheet, headerRows, rowIndex, colIndex)
+            : getMergedHeaderValue(sheet, headerRows, rowIndex, colIndex);
+          if (headerMatchesAny(detailValue, detailLabels)) {
+            return colIndex;
+          }
+        }
+      }
+      return null;
+    }
+
+    function findSchoolSubjectGradeRange(sheet, headerRows = []) {
+      const start = findTopHeaderColumn(sheet, headerRows, ["국어"]);
+      if (!isValidColumnIndex(start)) return null;
+      return {
+        start,
+        end: start + SCHOOL_SUBJECT_GRADE_COLUMN_COUNT - 1,
+        carryTop: true,
+      };
+    }
+
+    function buildStudentCsatColumnDescriptors(sheet, headerRows = [], range = null) {
       const descriptors = [];
       const subjectOrderMap = new Map();
       let lastSubject = "";
-      for (let colIndex = CSAT_COLUMN_START; colIndex <= CSAT_COLUMN_END; colIndex += 1) {
-        const subjectHeader = getMergedHeaderValue(sheet, headerRows, 0, colIndex);
+      const start = range && isValidColumnIndex(range.start) ? range.start : CSAT_COLUMN_START;
+      const end = range && isValidColumnIndex(range.end) ? range.end : CSAT_COLUMN_END;
+      for (let colIndex = start; colIndex <= end; colIndex += 1) {
+        const subjectHeader = range && range.carryTop
+          ? getCarriedHeaderValue(sheet, headerRows, 0, colIndex, start)
+          : getMergedHeaderValue(sheet, headerRows, 0, colIndex);
         if (subjectHeader) lastSubject = subjectHeader;
         const subject = lastSubject || getMergedHeaderValue(sheet, headerRows, 1, colIndex) || "기타";
         const detailLabel = getMergedHeaderValue(sheet, headerRows, 1, colIndex)
@@ -815,14 +1025,28 @@
     }
 
     /* ── 교과(군)별 내신성적 ── */
-    function buildSubjectGradeDescriptors(sheet, headerRows = []) {
+    function buildSubjectGradeDescriptors(sheet, headerRows = [], range = null) {
       const descriptors = [];
-      for (let colIndex = SUBJECT_GRADE_COL_START; colIndex <= SUBJECT_GRADE_COL_END; colIndex++) {
-        const label = getMergedHeaderValue(sheet, headerRows, 0, colIndex)
-          || getMergedHeaderValue(sheet, headerRows, 1, colIndex)
+      const start = range && isValidColumnIndex(range.start) ? range.start : SUBJECT_GRADE_COL_START;
+      const end = range && isValidColumnIndex(range.end) ? range.end : SUBJECT_GRADE_COL_END;
+      for (let colIndex = start; colIndex <= end; colIndex++) {
+        const topLabel = range && range.carryTop
+          ? getCarriedHeaderValue(sheet, headerRows, 0, colIndex, start)
+          : getMergedHeaderValue(sheet, headerRows, 0, colIndex);
+        const detailLabel = getMergedHeaderValue(sheet, headerRows, 1, colIndex)
           || getMergedHeaderValue(sheet, headerRows, 2, colIndex);
+        const label = [topLabel, detailLabel]
+          .map((part) => safe(part))
+          .filter(Boolean)
+          .filter((part, index, parts) => parts.indexOf(part) === index)
+          .join(" ");
         if (!label) continue;
-        descriptors.push({ colIndex, label });
+        descriptors.push({
+          colIndex,
+          group: topLabel || "기타",
+          label: detailLabel || topLabel || "값",
+          order: descriptors.length,
+        });
       }
       return descriptors;
     }
@@ -832,7 +1056,12 @@
           const raw = safe(row[d.colIndex]);
           if (!raw) return null;
           const num = parseFloat(raw);
-          return { label: d.label, value: Number.isFinite(num) ? num : raw };
+          return {
+            group: safe(d.group) || "기타",
+            label: safe(d.label) || "값",
+            value: Number.isFinite(num) ? num : raw,
+            order: Number.isFinite(d.order) ? d.order : 0,
+          };
         })
         .filter(Boolean);
     }
@@ -854,6 +1083,73 @@
       if (!raw || typeof raw !== "object") return m;
       Object.entries(raw).forEach(([k, v]) => { if (Array.isArray(v) && v.length) m.set(k, v); });
       return m;
+    }
+
+    function readRowValue(row = [], colIndex = null) {
+      if (!Array.isArray(row) || !isValidColumnIndex(colIndex)) return "";
+      return row[colIndex];
+    }
+
+    function normalizeStudentIdentityPart(value) {
+      const raw = safe(value);
+      if (!raw) return "";
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric) && Number.isInteger(numeric)) {
+        return String(numeric);
+      }
+      return raw;
+    }
+
+    function buildStudentKeyFromRow(row = [], columns = {}) {
+      const legacyKey = safe(readRowValue(row, columns.student_key));
+      if (legacyKey) return legacyKey;
+      const grade = normalizeStudentIdentityPart(readRowValue(row, columns.grade));
+      const classNo = normalizeStudentIdentityPart(readRowValue(row, columns.class_no));
+      const studentNo = normalizeStudentIdentityPart(readRowValue(row, columns.student_no));
+      if (!grade || !classNo || !studentNo) return "";
+      return `G${grade}-C${classNo}-N${studentNo}`;
+    }
+
+    function readAcademicYearFromRow(row = [], columns = {}, fallbackYear = null) {
+      const parsed = parseAcademicYear(readRowValue(row, columns.academic_year));
+      return parsed !== null ? parsed : fallbackYear;
+    }
+
+    function extractAcademicYearCandidatesFromFilename(fileLabel = "") {
+      const matches = safe(fileLabel).match(/(?:^|[^0-9])(20[0-9]{2})(?![0-9])/g) || [];
+      const candidates = matches
+        .map((match) => {
+          const yearMatch = match.match(/20[0-9]{2}/);
+          return yearMatch ? parseAcademicYear(yearMatch[0]) : null;
+        })
+        .filter((year) => year !== null);
+      return Array.from(new Set(candidates));
+    }
+
+    function parseAcademicYearInput(value = "") {
+      const candidates = extractAcademicYearCandidatesFromFilename(value);
+      return candidates.length === 1 ? candidates[0] : null;
+    }
+
+    function resolveAcademicYearFallbackFromFilename(fileLabel = "", layout = null) {
+      if (!layout || layout.type !== "school") return null;
+      if (layout.columns && isValidColumnIndex(layout.columns.academic_year)) return null;
+      const candidates = extractAcademicYearCandidatesFromFilename(fileLabel);
+      const defaultValue = candidates.length ? String(candidates[0]) : "";
+      const candidateText = candidates.length
+        ? `파일명에서 학년도 후보를 찾았습니다: ${candidates.join(", ")}`
+        : "파일명에서 20NN 형식의 학년도를 찾지 못했습니다.";
+      const entered = window.prompt(
+        `${fileLabel}: '학년도' 열을 찾지 못했습니다.\n${candidateText}\n사용할 학년도를 직접 입력하거나 기본값을 확인해주세요. 비워두면 학년도 없이 처리합니다.`,
+        defaultValue
+      );
+      if (entered === null || !safe(entered)) return null;
+      const selected = parseAcademicYearInput(entered);
+      if (selected === null) {
+        window.alert(`${fileLabel}: 학년도는 2024처럼 20NN 형식으로 입력해주세요. 학년도 없이 처리합니다.`);
+        return null;
+      }
+      return selected;
     }
 
     function safe(v) { return v === undefined || v === null ? "" : String(v).trim(); }
@@ -1618,6 +1914,7 @@ body.protected-export-locked {
             <input id="sharedExportPassword" type="password" placeholder="선택 입력" autocomplete="new-password" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:11px 12px; font:inherit; margin-bottom:12px;">
             <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportPasswordConfirm">암호 확인</label>
             <input id="sharedExportPasswordConfirm" type="password" placeholder="암호를 다시 입력" autocomplete="new-password" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:11px 12px; font:inherit;">
+            <div style="font-size:12px; line-height:1.55; color:#64748b; margin-top:8px;">암호 없이도 저장할 수 있습니다. 다만 개인정보가 포함된 보고서를 공유할 때는 10자 이상, 영문/숫자/기호를 섞거나 긴 문장형 암호를 권장합니다.</div>
             <div id="sharedExportOptionsError" style="min-height:18px; font-size:12px; color:#b91c1c; margin-top:10px;"></div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
               <button type="button" id="cancelSharedExport" style="border:1px solid #d1d5db; background:#fff; color:#374151; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">취소</button>
@@ -5073,10 +5370,65 @@ body.protected-export-locked {
       </section>`;
     }
 
+    function splitSubjectGradeLabel(label = "") {
+      const raw = safe(label);
+      const parts = raw.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return {
+          group: parts[0],
+          label: parts.slice(1).join(" "),
+        };
+      }
+      return {
+        group: "기타",
+        label: raw || "값",
+      };
+    }
+
+    function normalizeSubjectGradeEntry(entry = {}, index = 0) {
+      const fallback = splitSubjectGradeLabel(entry.label);
+      return {
+        group: safe(entry.group) || fallback.group,
+        label: safe(entry.group) ? (safe(entry.label) || "값") : fallback.label,
+        value: entry.value,
+        order: Number.isFinite(entry.order) ? entry.order : index,
+      };
+    }
+
+    function groupStudentSubjectGrades(grades = []) {
+      const grouped = new Map();
+      grades
+        .map((entry, index) => normalizeSubjectGradeEntry(entry, index))
+        .filter((entry) => safe(entry.value))
+        .sort((a, b) => a.order - b.order)
+        .forEach((entry) => {
+          if (!grouped.has(entry.group)) {
+            grouped.set(entry.group, {
+              group: entry.group,
+              order: entry.order,
+              items: [],
+            });
+          }
+          const group = grouped.get(entry.group);
+          group.order = Math.min(group.order, entry.order);
+          group.items.push(entry);
+        });
+      return Array.from(grouped.values()).sort((a, b) => a.order - b.order);
+    }
+
+    function renderSubjectGradePill(value) {
+      const display = typeof value === "number" ? value.toFixed(2) : String(value);
+      const gradeNum = typeof value === "number" ? Math.floor(value) : parseStudentCsatGradeNumber(display);
+      const gradeClass = gradeNum && gradeNum >= 1 && gradeNum <= 9 ? ` is-grade-${gradeNum}` : " is-grade-unknown";
+      return `<span class="subject-grade-pill${gradeClass}">${escapeHtml(display)}</span>`;
+    }
+
     function buildStudentSubjectGradeSummaryHtml(student, detailRows = []) {
       const studentKey = getStudentRecordKey(student) || detailRows.find((row) => getStudentRecordKey(row))?.student_key || "";
       const grades = studentKey ? (dataState.studentSubjectGradeByKey.get(studentKey) || []) : [];
       if (!grades.length) return "";
+      const groups = groupStudentSubjectGrades(grades);
+      if (!groups.length) return "";
       const yearLabel = formatAcademicYearScope(detailRows);
       const subtitle = yearLabel ? `${yearLabel} 기준 교과(군)별 내신 등급` : "교과(군)별 내신 등급";
       return `<section class="detail-csat-card">
@@ -5084,18 +5436,16 @@ body.protected-export-locked {
           <div class="detail-csat-title">교과별 내신 성적</div>
           <div class="detail-csat-subtitle">${escapeHtml(subtitle)}</div>
         </div>
-        <div class="detail-csat-grid">
-          ${grades.map((g) => {
-            const display = typeof g.value === "number" ? g.value.toFixed(2) : String(g.value);
-            const gradeNum = typeof g.value === "number" ? Math.floor(g.value) : parseStudentCsatGradeNumber(display);
-            const gradeClass = gradeNum && gradeNum >= 1 && gradeNum <= 9 ? ` is-grade-${gradeNum}` : " is-grade-unknown";
-            return `<article class="detail-csat-subject">
-            <div class="detail-csat-subject-head">
-              <div class="detail-csat-subject-title">${escapeHtml(g.label)}</div>
-              <span class="subject-grade-pill${gradeClass}">${escapeHtml(display)}</span>
+        <div class="subject-grade-groups">
+          ${groups.map((group) => `<article class="subject-grade-group">
+            <div class="subject-grade-group-title">${escapeHtml(group.group)}</div>
+            <div class="subject-grade-group-list">
+              ${group.items.map((item) => `<div class="subject-grade-row">
+                <span class="subject-grade-label">${escapeHtml(item.label)}</span>
+                ${renderSubjectGradePill(item.value)}
+              </div>`).join("")}
             </div>
-          </article>`;
-          }).join("")}
+          </article>`).join("")}
         </div>
       </section>`;
     }

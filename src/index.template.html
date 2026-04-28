@@ -20,7 +20,16 @@
 
   <section id="upload-panel" class="panel">
     <h2>엑셀 업로드</h2>
-    <div style="margin-top: 0; margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">연도별 엑셀 파일을 여러 개 동시에 선택하여 업로드할 수 있습니다.</div>
+    <div style="margin-top: 0; margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">연도별 또는 학교별 엑셀 파일을 여러 개 동시에 선택하여 업로드할 수 있습니다.</div>
+    <div class="upload-format-guide">
+      <div class="upload-format-title">단위학교 입력양식</div>
+      <div class="upload-format-source">대교협대입상담프로그램 &gt; 진학관리</div>
+      <ol>
+        <li><strong>수시진학관리 &gt; 엑셀다운로드</strong>: 학생별 환산등급 및 수능정보까지 포함되어 있습니다.</li>
+        <li><strong>전년도 수시진학 &gt; 엑셀다운로드</strong>: 학생별 환산등급 및 수능정보가 누락될 수 있습니다.</li>
+      </ol>
+      <div class="upload-format-note">여러 해의 파일을 함께 업로드하면 연도별 분석이 가능합니다.</div>
+    </div>
     <div class="field">
       <input type="file" id="file-input" accept=".xlsx,.xls" multiple />
       <div class="actions">
