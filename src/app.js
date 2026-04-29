@@ -27,6 +27,7 @@
     const DEFAULT_DEPT_FINDER_GROUPING_MODE = "dept";
     const DEPT_SEARCH_RESULT_LIMIT = 30;
     const STUDENT_TREND_MAX_APPS = 6;
+    const STUDENT_YEAR_KEY_PATTERN = /^Y\d{4}::/;
     const ESTIMATED_FIVE_GRADE_STANDARDS = [
       { key: "busan", label: "부산" },
       { key: "gyeonggi", label: "경기" },
@@ -310,9 +311,32 @@
         openDeptCombo();
         return;
       }
+      const subjectGradeToggle = el.closest("[data-subject-grade-toggle]");
+      if (subjectGradeToggle) {
+        event.stopPropagation();
+        const card = subjectGradeToggle.closest("[data-subject-grade-card]");
+        const extraGroups = card ? card.querySelector("[data-subject-grade-extra]") : null;
+        if (!extraGroups) return;
+        const willExpand = extraGroups.hidden;
+        extraGroups.hidden = !willExpand;
+        subjectGradeToggle.setAttribute("aria-expanded", willExpand ? "true" : "false");
+        subjectGradeToggle.textContent = willExpand ? "상세내용접기" : "상세내용표시";
+        return;
+      }
       /* ── student drilldown ── */
       const target = el.closest('[data-student-drilldown="true"]');
       if (!target) return;
+      openStudentDetailModal({
+        student_key: target.dataset.studentKey || "",
+      });
+    });
+    detailModalBodyEl.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target instanceof Element
+        ? event.target.closest('[data-student-drilldown="true"]')
+        : null;
+      if (!target || target !== event.target) return;
+      event.preventDefault();
       openStudentDetailModal({
         student_key: target.dataset.studentKey || "",
       });
@@ -1272,6 +1296,15 @@
       const n = parseInt(v, 10);
       return Number.isFinite(n) ? n : null;
     }
+    function scopeStudentKeyByAcademicYear(studentKey, academicYear) {
+      const raw = safe(studentKey);
+      if (!raw || STUDENT_YEAR_KEY_PATTERN.test(raw)) return raw;
+      const year = parseAcademicYear(academicYear);
+      return year ? `Y${year}::${raw}` : raw;
+    }
+    function getUnscopedStudentKey(studentKey) {
+      return safe(studentKey).replace(STUDENT_YEAR_KEY_PATTERN, "");
+    }
     function parseIsRural(v) {
       const raw = safe(v).trim();
       // Handle Unicode circle symbols (○ U+25CB, ◯ U+25EF, ● U+25CF) as well as ASCII O/o
@@ -1330,6 +1363,7 @@
           ? resolveStudentKey(rawRecord, fallbackIndex)
           : `S${String(fallbackIndex + 1).padStart(5, "0")}`);
       }
+      normalized.student_key = scopeStudentKeyByAcademicYear(normalized.student_key, normalized.academic_year);
       return normalized;
     }
     function normalizeLoadedRecords(rawRecords = []) {
@@ -1858,7 +1892,14 @@ body.protected-export-locked {
       const nextMap = new Map();
       if (!(sourceMap instanceof Map) || !(keySet instanceof Set) || !keySet.size) return nextMap;
       keySet.forEach((key) => {
-        if (sourceMap.has(key)) nextMap.set(key, sourceMap.get(key));
+        if (sourceMap.has(key)) {
+          nextMap.set(key, sourceMap.get(key));
+          return;
+        }
+        const legacyKey = getUnscopedStudentKey(key);
+        if (legacyKey && legacyKey !== key && sourceMap.has(legacyKey)) {
+          nextMap.set(key, sourceMap.get(legacyKey));
+        }
       });
       return nextMap;
     }
@@ -5458,9 +5499,19 @@ body.protected-export-locked {
       return student.student_key || "";
     }
 
+    function getStudentAuxMapValue(sourceMap, studentKey) {
+      if (!(sourceMap instanceof Map) || !studentKey) return undefined;
+      if (sourceMap.has(studentKey)) return sourceMap.get(studentKey);
+      const legacyKey = getUnscopedStudentKey(studentKey);
+      if (legacyKey && legacyKey !== studentKey && sourceMap.has(legacyKey)) {
+        return sourceMap.get(legacyKey);
+      }
+      return undefined;
+    }
+
     function buildStudentContextLabel(student, detailRows = []) {
       const schoolLocation = detailRows.find((row) => safe(row.school_location))?.school_location || "";
-      return schoolLocation || student.school_location || student.student_key || "소재지 미기재";
+      return schoolLocation || student.school_location || getUnscopedStudentKey(student.student_key) || "소재지 미기재";
     }
 
     function findStudentCsatGradeEntry(entries = []) {
@@ -5498,7 +5549,7 @@ body.protected-export-locked {
 
     function buildStudentCsatSummaryHtml(student, detailRows = []) {
       const studentKey = getStudentRecordKey(student) || detailRows.find((row) => getStudentRecordKey(row))?.student_key || "";
-      const csatProfile = studentKey ? normalizeStudentCsatProfile(dataState.studentCsatByKey.get(studentKey)) : [];
+      const csatProfile = studentKey ? normalizeStudentCsatProfile(getStudentAuxMapValue(dataState.studentCsatByKey, studentKey)) : [];
       if (!csatProfile.length) return "";
       const yearLabel = formatAcademicYearScope(detailRows);
       const subtitle = yearLabel ? `${yearLabel} 기준 업로드된 수능 성적` : "업로드된 수능 성적";
@@ -5574,6 +5625,11 @@ body.protected-export-locked {
       return Array.from(grouped.values()).sort((a, b) => a.order - b.order);
     }
 
+    function isCoreSubjectGradeGroup(groupName = "") {
+      const normalized = safe(groupName).replace(/\s+/g, "");
+      return ["국어", "영어", "수학", "사회", "과학"].some((subject) => normalized.includes(subject));
+    }
+
     function renderSubjectGradePill(value) {
       const display = typeof value === "number" ? value.toFixed(2) : String(value);
       const gradeNum = typeof value === "number" ? Math.floor(value) : parseStudentCsatGradeNumber(display);
@@ -5581,30 +5637,53 @@ body.protected-export-locked {
       return `<span class="subject-grade-pill${gradeClass}">${escapeHtml(display)}</span>`;
     }
 
+    function renderSubjectGradeGroupHtml(group) {
+      return `<article class="subject-grade-group">
+        <div class="subject-grade-group-title">${escapeHtml(group.group)}</div>
+        <div class="subject-grade-group-list">
+          ${group.items.map((item) => `<div class="subject-grade-row">
+            <span class="subject-grade-label">${escapeHtml(item.label)}</span>
+            ${renderSubjectGradePill(item.value)}
+          </div>`).join("")}
+        </div>
+      </article>`;
+    }
+
     function buildStudentSubjectGradeSummaryHtml(student, detailRows = []) {
       const studentKey = getStudentRecordKey(student) || detailRows.find((row) => getStudentRecordKey(row))?.student_key || "";
-      const grades = studentKey ? (dataState.studentSubjectGradeByKey.get(studentKey) || []) : [];
+      const grades = studentKey ? (getStudentAuxMapValue(dataState.studentSubjectGradeByKey, studentKey) || []) : [];
       if (!grades.length) return "";
       const groups = groupStudentSubjectGrades(grades);
       if (!groups.length) return "";
+      let primaryGroups = groups.filter((group) => isCoreSubjectGradeGroup(group.group));
+      let extraGroups = groups.filter((group) => !isCoreSubjectGradeGroup(group.group));
+      if (!primaryGroups.length) {
+        primaryGroups = groups;
+        extraGroups = [];
+      }
       const yearLabel = formatAcademicYearScope(detailRows);
       const subtitle = yearLabel ? `${yearLabel} 기준 교과(군)별 내신 등급` : "교과(군)별 내신 등급";
-      return `<section class="detail-csat-card">
-        <div class="detail-csat-head">
-          <div class="detail-csat-title">교과별 내신 성적</div>
-          <div class="detail-csat-subtitle">${escapeHtml(subtitle)}</div>
+      const extraToggleHtml = extraGroups.length
+        ? `<button type="button" class="subject-grade-toggle" data-subject-grade-toggle="true" aria-expanded="false">상세내용표시</button>`
+        : "";
+      const extraGroupsHtml = extraGroups.length
+        ? `<div class="subject-grade-extra" data-subject-grade-extra hidden>
+            <div class="subject-grade-extra-title">기타 교과</div>
+            <div class="subject-grade-groups">${extraGroups.map(renderSubjectGradeGroupHtml).join("")}</div>
+          </div>`
+        : "";
+      return `<section class="detail-csat-card" data-subject-grade-card="true">
+        <div class="detail-csat-head subject-grade-head">
+          <div>
+            <div class="detail-csat-title">교과별 내신 성적</div>
+            <div class="detail-csat-subtitle">${escapeHtml(subtitle)}</div>
+          </div>
+          ${extraToggleHtml}
         </div>
         <div class="subject-grade-groups">
-          ${groups.map((group) => `<article class="subject-grade-group">
-            <div class="subject-grade-group-title">${escapeHtml(group.group)}</div>
-            <div class="subject-grade-group-list">
-              ${group.items.map((item) => `<div class="subject-grade-row">
-                <span class="subject-grade-label">${escapeHtml(item.label)}</span>
-                ${renderSubjectGradePill(item.value)}
-              </div>`).join("")}
-            </div>
-          </article>`).join("")}
+          ${primaryGroups.map(renderSubjectGradeGroupHtml).join("")}
         </div>
+        ${extraGroupsHtml}
       </section>`;
     }
 
@@ -5983,7 +6062,7 @@ body.protected-export-locked {
           enableStudentLinks ? "detail-row-clickable" : "",
         ].filter(Boolean);
         const rowAttrs = enableStudentLinks
-          ? ` data-student-drilldown="true" data-student-key="${escapeHtml(getStudentRecordKey(r))}"`
+          ? ` data-student-drilldown="true" data-student-key="${escapeHtml(getStudentRecordKey(r))}" tabindex="0" role="button" aria-label="학생 상세 보기"`
           : "";
         const cells = columns.map((column) => {
           const cellContent = column.render
