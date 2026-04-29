@@ -525,7 +525,7 @@
       display: grid;
       gap: 6px;
       min-width: 96px;
-      min-height: 76px;
+      min-height: 96px;
       align-content: center;
       justify-items: center;
     }
@@ -550,10 +550,41 @@
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
+    .year-trend-pass {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 12px;
+      color: #047857;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
     .year-trend-label {
       display: flex;
       align-items: center;
-      min-height: 76px;
+      min-height: 96px;
+      font-weight: 600;
+    }
+    .year-trend-total-row td {
+      background: rgba(16, 185, 129, 0.06);
+      border-top: 1px solid var(--border);
+      font-weight: 700;
+    }
+    .year-trend-total-row .year-trend-label {
+      gap: 6px;
+      flex-wrap: wrap;
+      min-height: 46px;
+    }
+    .year-trend-total-cell {
+      display: grid;
+      min-height: 46px;
+      align-content: center;
+      justify-items: center;
+    }
+    .year-trend-total-note {
+      font-size: 11px;
+      color: var(--text-secondary);
       font-weight: 600;
     }
     .year-trend-table td[data-apptype-click],

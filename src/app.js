@@ -2571,7 +2571,7 @@ body.protected-export-locked {
 	    function buildYearComparisonSection(allRecords, years) {
 	      return `<div class="dept-container section-year-comparison" id="year-comparison-section">
 	        <div class="dept-header">연도별 비교</div>
-	        <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3><div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격률</strong>을 함께 비교합니다.</div></div></div>
+	        <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3><div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div></div></div>
 	          <div id="year-apptype-trend-table" class="aux-container"></div>
 	        </div>
 	        <div class="card"><div class="card-head"><div class="card-head-copy"><h3>연도별 주요 대학 지원 추이</h3></div></div>
@@ -2717,12 +2717,16 @@ body.protected-export-locked {
       const YEAR_COL_WIDTH = 126;
       const apptypeMap = new Map();
       const yearTotals = {};
+      const yearPassTotals = {};
       allRecords.forEach((record) => {
         const apptype = record.apptype || "미상";
         if (!apptypeMap.has(apptype)) apptypeMap.set(apptype, { total: 0, byYear: {} });
         const entry = apptypeMap.get(apptype);
         entry.total += 1;
         yearTotals[record.academic_year] = (yearTotals[record.academic_year] || 0) + 1;
+        if (record.result === "합격" || record.result === "충원합격") {
+          yearPassTotals[record.academic_year] = (yearPassTotals[record.academic_year] || 0) + 1;
+        }
         if (!entry.byYear[record.academic_year]) {
           entry.byYear[record.academic_year] = { total: 0, pass: 0 };
         }
@@ -2743,6 +2747,7 @@ body.protected-export-locked {
               <div class="year-trend-cell">
                 <div class="year-trend-count">지원 ${yearEntry.total.toLocaleString()}건</div>
                 <div class="year-trend-share">지원 비율 ${escapeHtml(share)}</div>
+                <div class="year-trend-pass">합격 ${yearEntry.pass.toLocaleString()}건</div>
                 <div class="year-trend-rate">합격률 ${escapeHtml(rate)}</div>
               </div>
             </td>`;
@@ -2758,6 +2763,14 @@ body.protected-export-locked {
       }
       const colgroup = `<col style="width:${APPTYPE_COL_WIDTH}px;">${years.map(() => `<col style="width:${YEAR_COL_WIDTH}px;">`).join("")}`;
       const yearHeaders = years.map((year) => `<th style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">${year}</th>`).join("");
+      const totalCells = years.map((year) => {
+        const totalPass = yearPassTotals[year] || 0;
+        return `<td style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
+          <div class="year-trend-total-cell">
+            <div class="year-trend-pass">합격 ${totalPass.toLocaleString()}건</div>
+          </div>
+        </td>`;
+      }).join("");
       el.innerHTML = `<div class="summary-table-wrap" style="overflow-x:auto;">
         <table class="summary-table year-trend-table">
           <colgroup>${colgroup}</colgroup>
@@ -2768,6 +2781,14 @@ body.protected-export-locked {
             </tr>
           </thead>
           <tbody>${rows}</tbody>
+          <tfoot>
+            <tr class="year-trend-total-row">
+              <td style="width:${APPTYPE_COL_WIDTH}px;min-width:${APPTYPE_COL_WIDTH}px;max-width:${APPTYPE_COL_WIDTH}px;">
+                <span class="year-trend-label">총 합격건수<span class="year-trend-total-note">충원포함</span></span>
+              </td>
+              ${totalCells}
+            </tr>
+          </tfoot>
         </table>
       </div>`;
       el.onclick = (event) => {
@@ -4335,7 +4356,7 @@ body.protected-export-locked {
         html += `<div class="dept-container section-year-comparison">
           <div class="dept-header">연도별 비교</div>
           <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
+            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
           </div></div>
             <div id="univ-analytics-year-apptype" class="aux-container"></div>
           </div>
@@ -4424,7 +4445,7 @@ body.protected-export-locked {
         html += `<div class="dept-container section-year-comparison">
           <div class="dept-header">연도별 비교</div>
           <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
+            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
           </div></div>
             <div id="dept-analytics-year-apptype" class="aux-container"></div>
           </div>
@@ -5114,7 +5135,7 @@ body.protected-export-locked {
         html += `<div class="dept-container section-year-comparison">
           <div class="dept-header">연도별 비교</div>
           <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
+            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
           </div></div>
             <div id="subtype-analytics-year-apptype" class="aux-container"></div>
           </div>
