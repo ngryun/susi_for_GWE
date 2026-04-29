@@ -149,6 +149,24 @@
     const SCHOOL_EXCEL_DATA_START_ROW_INDEX = 2;
     const SCHOOL_SUBJECT_GRADE_COLUMN_COUNT = 28;
     const SCHOOL_CSAT_COLUMN_COUNT = 20;
+    const SHARED_EXPORT_RECORD_FIELDS = [
+      "student_key",
+      "academic_year",
+      "school_location",
+      "is_rural",
+      "region",
+      "univ",
+      "apptype",
+      "subtype",
+      "dept",
+      "enrollment_count",
+      "selection_type",
+      "result",
+      "registered_yn",
+      "all_subj_grade",
+      "conv_grade",
+      "conv_grade_ext",
+    ];
     const SUBJECT_GRADE_COL_START = 29; // AD
     const SUBJECT_GRADE_COL_END = 33;   // AH
     const CSAT_COLUMN_START = 57; // BF
@@ -1012,9 +1030,56 @@
       return serialized;
     }
 
+    function packStudentCsatMapForShared(serialized = {}) {
+      if (!serialized || typeof serialized !== "object") return { v: 1, fields: [], rows: [] };
+      const fields = [];
+      const fieldIndex = new Map();
+      const rows = [];
+      Object.entries(serialized).forEach(([studentKey, profile]) => {
+        const values = [];
+        normalizeStudentCsatProfile(profile).forEach((group) => {
+          group.entries.forEach((entry) => {
+            const fieldKey = `${group.subject}\u001f${entry.label}`;
+            let index = fieldIndex.get(fieldKey);
+            if (index === undefined) {
+              index = fields.length;
+              fieldIndex.set(fieldKey, index);
+              fields.push([group.subject, entry.label]);
+            }
+            values[index] = entry.value;
+          });
+        });
+        if (values.some((value) => safe(value))) {
+          rows.push([studentKey, values]);
+        }
+      });
+      return { v: 1, fields, rows };
+    }
+
     function restoreStudentCsatMap(rawValue) {
       const restored = new Map();
       if (!rawValue || typeof rawValue !== "object") return restored;
+      if (rawValue.v === 1 && Array.isArray(rawValue.fields) && Array.isArray(rawValue.rows)) {
+        rawValue.rows.forEach((row) => {
+          const studentKey = safe(Array.isArray(row) ? row[0] : "");
+          const values = Array.isArray(row) && Array.isArray(row[1]) ? row[1] : [];
+          if (!studentKey || !values.length) return;
+          const grouped = new Map();
+          rawValue.fields.forEach((field, fieldIndex) => {
+            const value = values[fieldIndex];
+            if (!safe(value)) return;
+            const subject = safe(Array.isArray(field) ? field[0] : "") || "기타";
+            const label = safe(Array.isArray(field) ? field[1] : "") || "값";
+            if (!grouped.has(subject)) {
+              grouped.set(subject, { subject, order: grouped.size, entries: [] });
+            }
+            grouped.get(subject).entries.push({ label, value, order: fieldIndex });
+          });
+          const normalizedProfile = normalizeStudentCsatProfile(Array.from(grouped.values()));
+          if (normalizedProfile.length) restored.set(studentKey, normalizedProfile);
+        });
+        return restored;
+      }
       Object.entries(rawValue).forEach(([studentKey, profile]) => {
         const normalizedProfile = normalizeStudentCsatProfile(profile);
         if (normalizedProfile.length) {
@@ -1078,9 +1143,54 @@
       map.forEach((grades, key) => { if (grades.length) out[key] = grades; });
       return out;
     }
+    function packSubjectGradeMapForShared(serialized = {}) {
+      if (!serialized || typeof serialized !== "object") return { v: 1, fields: [], rows: [] };
+      const fields = [];
+      const fieldIndex = new Map();
+      const rows = [];
+      Object.entries(serialized).forEach(([studentKey, grades]) => {
+        if (!Array.isArray(grades) || !grades.length) return;
+        const values = [];
+        grades.forEach((grade, gradeIndex) => {
+          const normalized = normalizeSubjectGradeEntry(grade, gradeIndex);
+          const fieldKey = `${normalized.group}\u001f${normalized.label}`;
+          let index = fieldIndex.get(fieldKey);
+          if (index === undefined) {
+            index = fields.length;
+            fieldIndex.set(fieldKey, index);
+            fields.push([normalized.group, normalized.label]);
+          }
+          values[index] = normalized.value;
+        });
+        if (values.some((value) => safe(value))) {
+          rows.push([studentKey, values]);
+        }
+      });
+      return { v: 1, fields, rows };
+    }
     function restoreSubjectGradeMap(raw) {
       const m = new Map();
       if (!raw || typeof raw !== "object") return m;
+      if (raw.v === 1 && Array.isArray(raw.fields) && Array.isArray(raw.rows)) {
+        raw.rows.forEach((row) => {
+          const studentKey = safe(Array.isArray(row) ? row[0] : "");
+          const values = Array.isArray(row) && Array.isArray(row[1]) ? row[1] : [];
+          if (!studentKey || !values.length) return;
+          const grades = [];
+          raw.fields.forEach((field, fieldIndex) => {
+            const value = values[fieldIndex];
+            if (!safe(value)) return;
+            grades.push({
+              group: safe(Array.isArray(field) ? field[0] : "") || "기타",
+              label: safe(Array.isArray(field) ? field[1] : "") || "값",
+              value,
+              order: fieldIndex,
+            });
+          });
+          if (grades.length) m.set(studentKey, grades);
+        });
+        return m;
+      }
       Object.entries(raw).forEach(([k, v]) => { if (Array.isArray(v) && v.length) m.set(k, v); });
       return m;
     }
@@ -1405,6 +1515,33 @@
         };
       });
     }
+    function packRecordsForShared(records = []) {
+      return {
+        v: 1,
+        fields: SHARED_EXPORT_RECORD_FIELDS,
+        rows: sanitizeRecordsForShared(records).map((record) => (
+          SHARED_EXPORT_RECORD_FIELDS.map((field) => {
+            const value = record[field];
+            return value === undefined ? null : value;
+          })
+        )),
+      };
+    }
+    function unpackSharedRecords(rawValue) {
+      if (Array.isArray(rawValue)) return rawValue;
+      if (!rawValue || typeof rawValue !== "object") return [];
+      if (rawValue.v !== 1 || !Array.isArray(rawValue.fields) || !Array.isArray(rawValue.rows)) return [];
+      return rawValue.rows.map((row, index) => {
+        const record = {};
+        rawValue.fields.forEach((field, fieldIndex) => {
+          record[field] = Array.isArray(row) ? row[fieldIndex] : null;
+        });
+        if (!safe(record.student_key)) {
+          record.student_key = `S${String(index + 1).padStart(5, "0")}`;
+        }
+        return record;
+      });
+    }
     function arrayBufferToBase64(buffer) {
       const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
       let binary = "";
@@ -1727,11 +1864,11 @@ body.protected-export-locked {
     }
     function serializeStudentCsatMapForRecords(records = []) {
       const keySet = collectStudentKeysFromRecords(records);
-      return serializeStudentCsatMap(selectStudentMapEntries(dataState.studentCsatByKey, keySet));
+      return packStudentCsatMapForShared(serializeStudentCsatMap(selectStudentMapEntries(dataState.studentCsatByKey, keySet)));
     }
     function serializeSubjectGradeMapForRecords(records = []) {
       const keySet = collectStudentKeysFromRecords(records);
-      return serializeSubjectGradeMap(selectStudentMapEntries(dataState.studentSubjectGradeByKey, keySet));
+      return packSubjectGradeMapForShared(serializeSubjectGradeMap(selectStudentMapEntries(dataState.studentSubjectGradeByKey, keySet)));
     }
     function buildFullSharedExportContext() {
       const uiState = JSON.parse(JSON.stringify(getCurrentReportUiState()));
@@ -1840,7 +1977,7 @@ body.protected-export-locked {
       preloadScript.id = "preloaded-shared-data";
       if (password) {
         const encryptedPayload = await encryptExportPayload(password, {
-          analysisData: sanitizeRecordsForShared(records),
+          analysisData: packRecordsForShared(records),
           studentCsatData,
           subjectGradeData,
           uiState,
@@ -1853,7 +1990,7 @@ body.protected-export-locked {
           "  ns.preloaded = ns.preloaded || {};",
           `  ns.preloaded.buildUtc = ${serializeForInlineScript(new Date().toISOString())};`,
           "  ns.preloaded.shared = true;",
-          `  ns.preloaded.data = ${serializeForInlineScript(sanitizeRecordsForShared(records))};`,
+          `  ns.preloaded.data = ${serializeForInlineScript(packRecordsForShared(records))};`,
           `  ns.preloaded.studentCsat = ${serializeForInlineScript(studentCsatData)};`,
           `  ns.preloaded.subjectGrade = ${serializeForInlineScript(subjectGradeData)};`,
           `  ns.preloaded.uiState = ${serializeForInlineScript(uiState)};`,
@@ -6573,8 +6710,9 @@ body.protected-export-locked {
 
     function initializePreloadedReport() {
       const pre = (window.SusiApp && window.SusiApp.preloaded) || {};
-      if (!Array.isArray(pre.data) || !pre.data.length) return;
-      const normalizedRecords = normalizeLoadedRecords(pre.data);
+      const preloadedRecords = unpackSharedRecords(pre.data);
+      if (!Array.isArray(preloadedRecords) || !preloadedRecords.length) return;
+      const normalizedRecords = normalizeLoadedRecords(preloadedRecords);
       dataState.loadedRecords = normalizedRecords;
       dataState.studentCsatByKey = restoreStudentCsatMap(pre.studentCsat);
       dataState.studentSubjectGradeByKey = restoreSubjectGradeMap(pre.subjectGrade);
