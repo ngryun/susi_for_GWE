@@ -532,6 +532,36 @@
       padding-left: 4px;
       padding-right: 4px;
     }
+    .year-table-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+    .year-table-export-btn {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #1e293b;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .year-table-export-btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .year-table-export-btn:active {
+      background: #e2e8f0;
+    }
+    .year-table-export-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     .year-trend-cell {
       display: grid;
       gap: 6px;
@@ -815,6 +845,9 @@
       vertical-align: top;
       background: var(--surface);
     }
+    .trend-table td {
+      height: 1px;
+    }
     .trend-table th {
       position: sticky;
       top: 0;
@@ -886,6 +919,7 @@
     }
     .trend-cell-core {
       min-height: 108px;
+      height: 100%;
       padding: 12px 14px;
     }
     .trend-cell-core.is-compact {
@@ -938,16 +972,13 @@
       transition: background-color 0.15s ease, box-shadow 0.15s ease;
     }
     .trend-app-cell.is-pass {
-      background: rgba(5, 150, 105, 0.10);
-      box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.08);
+      background: rgba(5, 150, 105, 0.16);
     }
     .trend-app-cell.is-wait {
-      background: rgba(217, 119, 6, 0.11);
-      box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.09);
+      background: rgba(217, 119, 6, 0.16);
     }
     .trend-app-cell.is-fail {
-      background: rgba(220, 38, 38, 0.09);
-      box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.08);
+      background: transparent;
     }
     .trend-support-card {
       display: grid;
@@ -1215,6 +1246,7 @@
       flex: 1 1 360px;
     }
     .detail-toolbar-meta {
+      flex-basis: 100%;
       min-width: 0;
       font-size: 12px;
       line-height: 1.5;
@@ -1309,6 +1341,36 @@
       transition: background .15s;
     }
     .dept-combo-clear:hover { background: #e2e8f0; color: #334155; }
+    /* Result filter (전체/합격/불합격) toggle group */
+    .result-toggle {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .result-toggle-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 7px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      border-right: 1px solid #e2e8f0;
+    }
+    .result-toggle-btn:last-child { border-right: none; }
+    .result-toggle-btn:hover { background: #f1f5f9; color: #1e293b; }
+    .result-toggle-btn.is-active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .result-toggle-btn.is-active:hover { background: #1d4ed8; }
     .detail-table-wrap {
       position: relative;
       isolation: isolate;
@@ -1370,7 +1432,6 @@
     .detail-table col.detail-col-register { width: 64px; }
     .detail-table col.detail-col-grade { width: 94px; }
     .detail-table col.detail-col-enrollment { width: 72px; }
-    .detail-table col.detail-col-rural { width: 56px; }
     .detail-table col.detail-col-selection { width: 136px; }
     .detail-table col.detail-col-conv { width: 110px; }
     .detail-table col.detail-col-grade-conv { width: 110px; }
@@ -1380,7 +1441,6 @@
     .detail-col-register,
     .detail-col-grade,
     .detail-col-enrollment,
-    .detail-col-rural,
     .detail-col-conv,
     .detail-col-grade-conv {
       text-align: center;
@@ -2354,6 +2414,8 @@
         max-width: none;
       }
       .dept-combo { min-width: 0; max-width: none; width: 100%; }
+      .result-toggle { width: 100%; }
+      .result-toggle-btn { flex: 1; padding: 8px 10px; }
       .detail-csat-grid {
         grid-template-columns: 1fr;
       }
@@ -2734,7 +2796,14 @@
 
     const SusiApp = (window.SusiApp = window.SusiApp || { preloaded: {} });
     SusiApp.preloaded = SusiApp.preloaded || {};
-    const deptComboState = { open: false, searchText: "", pending: null };
+    const comboState = { kind: null, open: false, searchText: "", pending: null };
+    const univTopRecordsByScope = new Map();
+    const yearTableExportRegistry = {};
+    const COMBO_KINDS = {
+      dept: { label: "모집단위", placeholder: "모집단위 검색...", filterKey: "deptFilter", rowKey: "dept" },
+      univ: { label: "대학명", placeholder: "대학명 검색...", filterKey: "univFilter", rowKey: "univ" },
+      subtype: { label: "세부유형", placeholder: "세부유형 검색...", filterKey: "subtypeFilter", rowKey: "subtype" },
+    };
     const analyticsViewState = {
       univTab: { active: false, entries: [], univ: "" },
       deptTab: { active: false, entries: [] },
@@ -2759,50 +2828,68 @@
         handleDetailModalPageAction(pageActionTrigger.getAttribute("data-detail-page-action") || "");
         return;
       }
-      /* ── dept combo: tag remove ── */
-      const removeBtn = el.closest("[data-dept-remove]");
+      /* ── result filter toggle ── */
+      const resultBtn = el.closest("[data-result-filter]");
+      if (resultBtn) {
+        event.stopPropagation();
+        handleDetailResultFilterChange(resultBtn.dataset.resultFilter || "all");
+        return;
+      }
+      /* ── combo: tag remove ── */
+      const removeBtn = el.closest("[data-combo-remove]");
       if (removeBtn) {
         event.stopPropagation();
-        const dept = removeBtn.dataset.deptRemove;
-        if (deptComboState.open && deptComboState.pending) {
-          const idx = deptComboState.pending.indexOf(dept);
-          if (idx >= 0) deptComboState.pending.splice(idx, 1);
-          syncDeptComboDOM();
+        const value = removeBtn.dataset.comboRemove;
+        const kind = removeBtn.closest("[data-combo-kind]")?.dataset.comboKind;
+        if (!kind) return;
+        if (comboState.open && comboState.kind === kind && comboState.pending) {
+          const idx = comboState.pending.indexOf(value);
+          if (idx >= 0) comboState.pending.splice(idx, 1);
+          syncComboDOM();
         } else {
           const cv = modalState.viewStack[modalState.viewStack.length - 1];
           if (cv) {
-            const arr = Array.isArray(cv.deptFilter) ? cv.deptFilter.filter(d => d !== dept) : [];
-            handleDetailDeptFilterChange(arr);
+            const fk = COMBO_KINDS[kind].filterKey;
+            const arr = Array.isArray(cv[fk]) ? cv[fk].filter(v => v !== value) : [];
+            handleDetailComboFilterChange(kind, arr);
           }
         }
         return;
       }
-      /* ── dept combo: clear all ── */
-      if (el.closest("[data-dept-clear-all]")) {
+      /* ── combo: clear all ── */
+      const clearBtn = el.closest("[data-combo-clear-all]");
+      if (clearBtn) {
         event.stopPropagation();
-        if (deptComboState.open) {
-          deptComboState.pending = [];
-          syncDeptComboDOM();
+        const kind = clearBtn.closest("[data-combo-kind]")?.dataset.comboKind;
+        if (!kind) return;
+        if (comboState.open && comboState.kind === kind) {
+          comboState.pending = [];
+          syncComboDOM();
         } else {
-          handleDetailDeptFilterChange([]);
+          handleDetailComboFilterChange(kind, []);
         }
         return;
       }
-      /* ── dept combo: option toggle ── */
-      const optionEl = el.closest("[data-dept-option]");
+      /* ── combo: option toggle ── */
+      const optionEl = el.closest("[data-combo-option]");
       if (optionEl) {
         event.stopPropagation();
-        const dept = optionEl.dataset.deptOption;
-        if (!deptComboState.pending) deptComboState.pending = [];
-        const idx = deptComboState.pending.indexOf(dept);
-        if (idx >= 0) deptComboState.pending.splice(idx, 1);
-        else deptComboState.pending.push(dept);
-        syncDeptComboDOM();
+        const value = optionEl.dataset.comboOption;
+        const kind = optionEl.closest("[data-combo-kind]")?.dataset.comboKind;
+        if (!kind) return;
+        if (!comboState.open || comboState.kind !== kind) openCombo(kind);
+        if (!comboState.pending) comboState.pending = [];
+        const idx = comboState.pending.indexOf(value);
+        if (idx >= 0) comboState.pending.splice(idx, 1);
+        else comboState.pending.push(value);
+        syncComboDOM();
         return;
       }
-      /* ── dept combo: open on input-area click ── */
-      if (el.closest("[data-dept-combo-area]")) {
-        openDeptCombo();
+      /* ── combo: open on input-area click ── */
+      const areaEl = el.closest("[data-combo-area]");
+      if (areaEl) {
+        const kind = areaEl.closest("[data-combo-kind]")?.dataset.comboKind;
+        if (kind) openCombo(kind);
         return;
       }
       const subjectGradeToggle = el.closest("[data-subject-grade-toggle]");
@@ -2836,22 +2923,24 @@
       });
     });
     detailModalBodyEl.addEventListener("input", (event) => {
-      const input = event.target instanceof HTMLInputElement && event.target.dataset.deptComboInput === "true"
+      const input = event.target instanceof HTMLInputElement && event.target.dataset.comboInput === "true"
         ? event.target : null;
       if (!input) return;
-      deptComboState.searchText = input.value;
-      filterDeptComboDropdown(input.value);
+      const kind = input.closest("[data-combo-kind]")?.dataset.comboKind;
+      if (!kind || comboState.kind !== kind) return;
+      comboState.searchText = input.value;
+      filterComboDropdown(input.value);
     });
     document.addEventListener("click", (event) => {
-      if (!deptComboState.open) return;
-      const combo = document.getElementById("dept-combo");
+      if (!comboState.open || !comboState.kind) return;
+      const combo = document.getElementById(`combo-${comboState.kind}`);
       if (combo && !combo.contains(event.target)) {
-        closeDeptCombo();
+        closeCombo();
       }
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
-        if (deptComboState.open) { closeDeptCombo(); event.stopPropagation(); return; }
+        if (comboState.open) { closeCombo(); event.stopPropagation(); return; }
         if (!detailModalEl.hidden) { closeDetailModal(); }
       }
     });
@@ -4872,34 +4961,7 @@ body.protected-export-locked {
         </div>`);
       plotCounter++;
 
-      summaryEl.insertAdjacentHTML("beforeend", `<div class="dept-container section-top20" id="univ-top-global">
-          <div class="dept-header">지원 상위 대학 TOP 20</div>
-          <div class="card">
-            <div class="card-head">
-              <div class="card-head-copy">
-                <h3>합격/충원/불합격 결과 비교</h3>
-                <div class="card-note" id="univ-top-note">${buildUnivTopNoteHtml("결과 비율")}</div>
-              </div>
-              <div class="control-stack">
-                <div class="control-group">
-                  <div class="control-group-label">표시 방식</div>
-                  <div class="segmented-control" data-univ-top-mode-group="global" aria-label="대학 TOP 20 차트 표시 방식">
-                    <button type="button" class="segmented-btn active" data-univ-top-mode="ratio" aria-pressed="true">비율 보기</button>
-                    <button type="button" class="segmented-btn" data-univ-top-mode="count" aria-pressed="false">건수 보기</button>
-                  </div>
-                </div>
-                <div class="control-group">
-                  <div class="control-group-label">정렬 기준</div>
-                  <div class="segmented-control" data-univ-top-sort-group="global" aria-label="대학 TOP 20 정렬 기준">
-                    <button type="button" class="segmented-btn active" data-univ-top-sort="total" aria-pressed="true">지원건수순</button>
-                    <button type="button" class="segmented-btn" data-univ-top-sort="allPassRate" aria-pressed="false">합격률순</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div id="univ-top-chart" class="plot-container"></div>
-          </div>
-        </div>`);
+      summaryEl.insertAdjacentHTML("beforeend", buildUnivTopSectionHtml("global"));
 
       if (filterState.yearFilter === "all" && metaYears.length > 1) {
         const locationFilteredAll = filterRecordsByLocation(metaAllRecords, filterState.locationFilter);
@@ -5182,6 +5244,22 @@ body.protected-export-locked {
       Plotly.newPlot(el, traces, layout, { displayModeBar: false, responsive: true });
     }
 
+    function downloadYearTableXlsx(exportId) {
+      const config = yearTableExportRegistry[exportId];
+      if (!config || !Array.isArray(config.rows) || !config.rows.length) return;
+      const worksheet = XLSX.utils.json_to_sheet(config.rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, config.sheetName || "데이터");
+      const filename = `${sanitizeFilenamePart(config.filenameBase || "데이터")}_${buildExportTimestamp()}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+    }
+
+    function buildYearTableActionsHtml(exportId) {
+      return `<div class="year-table-actions">
+        <button type="button" class="year-table-export-btn" data-year-table-export="${escapeHtml(exportId)}" title="현재 표를 엑셀 파일로 저장합니다.">엑셀 저장</button>
+      </div>`;
+    }
+
 	    function renderYearUnivTrendTable(allRecords, years, containerId) {
 	      const el = document.getElementById(containerId);
 	      if (!el) return;
@@ -5211,22 +5289,34 @@ body.protected-export-locked {
         `<th style="min-width:${SUPPORT_COL_WIDTH}px;text-align:center;">지원</th><th style="min-width:${RATE_COL_WIDTH}px;text-align:center;">합격률</th>`
       ).join("");
       const colgroup = `<col style="width:${UNIV_COL_WIDTH}px;">${years.map(() => `<col style="width:${SUPPORT_COL_WIDTH}px;"><col style="width:${RATE_COL_WIDTH}px;">`).join("")}`;
+      const exportRows = [];
       const bodyRows = top.map(([univ, data]) => {
+        const exportRow = { "대학명": univ };
         const cells = years.map(y => {
           const d = data.byYear[y] || { total: 0, pass: 0, passGrades: [] };
-          const rate = d.total ? (d.pass / d.total * 100).toFixed(1) + "%" : "-";
+          const rateText = d.total ? (d.pass / d.total * 100).toFixed(1) + "%" : "-";
           const passBandMeta = buildUnivPassBandMeta(d.passGrades || []);
           const rateCell = d.total
-            ? renderDetailTooltipCell(rate, [
+            ? renderDetailTooltipCell(rateText, [
                 `${UNIV_PASS_BAND_LABEL}: ${passBandMeta.label}`,
                 formatUnivPassBandSampleText(passBandMeta.sampleCount),
               ])
-            : renderDetailTextCell(rate);
+            : renderDetailTextCell(rateText);
+          exportRow[`${y} 지원건수`] = d.total;
+          exportRow[`${y} 합격건수`] = d.pass;
+          exportRow[`${y} 합격률`] = rateText;
           return `<td data-univ-click="${escapeHtml(univ)}" data-year="${y}" style="text-align:center;">${d.total}</td><td data-univ-click="${escapeHtml(univ)}" data-year="${y}" style="text-align:center;">${rateCell}</td>`;
         }).join("");
+        exportRows.push(exportRow);
         return `<tr><td data-univ-click="${escapeHtml(univ)}" style="width:${UNIV_COL_WIDTH}px;min-width:${UNIV_COL_WIDTH}px;max-width:${UNIV_COL_WIDTH}px;font-weight:500;"><span class="detail-cell-ellipsis" title="${escapeHtml(univ)}">${escapeHtml(univ)}</span></td>${cells}</tr>`;
       }).join("");
-	      el.innerHTML = `<div class="summary-table-wrap"><div style="overflow-x:auto;">
+      const exportId = `year-univ-${containerId}`;
+      yearTableExportRegistry[exportId] = {
+        rows: exportRows,
+        sheetName: "연도별주요대학지원추이",
+        filenameBase: "연도별_주요대학_지원추이",
+      };
+	      el.innerHTML = `${buildYearTableActionsHtml(exportId)}<div class="summary-table-wrap"><div style="overflow-x:auto;">
 	        <table class="summary-table year-univ-trend-table">
 	          <colgroup>${colgroup}</colgroup>
 	          <thead><tr><th rowspan="2" style="width:${UNIV_COL_WIDTH}px;min-width:${UNIV_COL_WIDTH}px;max-width:${UNIV_COL_WIDTH}px;">대학명</th>${yearHeaders}</tr><tr>${subHeaders}</tr></thead>
@@ -5234,6 +5324,12 @@ body.protected-export-locked {
 	        </table>
 	      </div></div>`;
 	      el.onclick = (event) => {
+	        const exportBtn = event.target instanceof Element ? event.target.closest("[data-year-table-export]") : null;
+	        if (exportBtn) {
+	          event.stopPropagation();
+	          downloadYearTableXlsx(exportBtn.getAttribute("data-year-table-export") || "");
+	          return;
+	        }
 	        const trigger = event.target instanceof Element ? event.target.closest("[data-univ-click]") : null;
 	        if (!trigger) return;
 	        const univ = trigger.getAttribute("data-univ-click") || "";
@@ -5271,13 +5367,19 @@ body.protected-export-locked {
           yearEntry.pass += 1;
         }
       });
+      const exportRows = [];
       const rows = Array.from(apptypeMap.entries())
         .sort((a, b) => (b[1].total - a[1].total) || a[0].localeCompare(b[0], "ko"))
         .map(([apptype, data]) => {
+          const exportRow = { "전형": apptype };
           const yearCells = years.map((year) => {
             const yearEntry = data.byYear[year] || { total: 0, pass: 0 };
             const rate = yearEntry.total ? ((yearEntry.pass / yearEntry.total) * 100).toFixed(1) + "%" : "-";
             const share = yearTotals[year] ? ((yearEntry.total / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
+            exportRow[`${year} 지원건수`] = yearEntry.total;
+            exportRow[`${year} 지원비율`] = share;
+            exportRow[`${year} 합격건수`] = yearEntry.pass;
+            exportRow[`${year} 합격률`] = rate;
             return `<td data-apptype-click="${escapeHtml(apptype)}" data-year="${year}" style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
               <div class="year-trend-cell">
                 <div class="year-trend-count">지원 ${yearEntry.total.toLocaleString()}건</div>
@@ -5287,11 +5389,26 @@ body.protected-export-locked {
               </div>
             </td>`;
           }).join("");
+          exportRows.push(exportRow);
           return `<tr>
             <td data-apptype-click="${escapeHtml(apptype)}" style="width:${APPTYPE_COL_WIDTH}px;min-width:${APPTYPE_COL_WIDTH}px;max-width:${APPTYPE_COL_WIDTH}px;"><span class="detail-cell-ellipsis year-trend-label" title="${escapeHtml(apptype)}">${escapeHtml(apptype)}</span></td>
             ${yearCells}
           </tr>`;
         }).join("");
+      const totalRow = { "전형": "총 합격건수(충원포함)" };
+      years.forEach((year) => {
+        totalRow[`${year} 지원건수`] = yearTotals[year] || 0;
+        totalRow[`${year} 지원비율`] = "";
+        totalRow[`${year} 합격건수`] = yearPassTotals[year] || 0;
+        totalRow[`${year} 합격률`] = yearTotals[year] ? (((yearPassTotals[year] || 0) / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
+      });
+      exportRows.push(totalRow);
+      const exportId = `year-apptype-${containerId}`;
+      yearTableExportRegistry[exportId] = {
+        rows: exportRows,
+        sheetName: "연도별전형별현황",
+        filenameBase: "연도별_전형별_현황",
+      };
       if (!rows) {
         el.innerHTML = '<div class="empty">데이터 없음</div>';
         return;
@@ -5306,7 +5423,7 @@ body.protected-export-locked {
           </div>
         </td>`;
       }).join("");
-      el.innerHTML = `<div class="summary-table-wrap" style="overflow-x:auto;">
+      el.innerHTML = `${buildYearTableActionsHtml(exportId)}<div class="summary-table-wrap" style="overflow-x:auto;">
         <table class="summary-table year-trend-table">
           <colgroup>${colgroup}</colgroup>
           <thead>
@@ -5327,6 +5444,12 @@ body.protected-export-locked {
         </table>
       </div>`;
       el.onclick = (event) => {
+        const exportBtn = event.target instanceof Element ? event.target.closest("[data-year-table-export]") : null;
+        if (exportBtn) {
+          event.stopPropagation();
+          downloadYearTableXlsx(exportBtn.getAttribute("data-year-table-export") || "");
+          return;
+        }
         const trigger = event.target instanceof Element ? event.target.closest("[data-apptype-click]") : null;
         if (!trigger) return;
         const apptype = trigger.getAttribute("data-apptype-click") || "";
@@ -5785,6 +5908,36 @@ body.protected-export-locked {
     function buildUnivTopNoteHtml(modeText) {
       return `상위 20개 대학은 지원 건수 기준으로 선정했습니다. 막대는 ${modeText}, 우측 숫자 열은 총건수와 ${UNIV_PASS_BAND_LABEL}입니다. ${UNIV_PASS_BAND_LABEL}는 ${UNIV_PASS_BAND_DESCRIPTION}이며, 합격·충원 표본 ${UNIV_PASS_BAND_SMALL_SAMPLE_THRESHOLD}건 미만 정보는 hover와 상세 화면에서 안내합니다.<span class="card-note-emphasis">막대그래프나 대학명을 클릭하면 해당 대학의 지원 데이터를 조회할 수 있습니다.</span>`;
     }
+    function buildUnivTopSectionHtml(scope = "global") {
+      return `<div class="dept-container section-top20" id="univ-top-${scope}">
+          <div class="dept-header">지원 상위 대학 TOP 20</div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-head-copy">
+                <h3>합격/충원/불합격 결과 비교</h3>
+                <div class="card-note" data-univ-top-note="${scope}">${buildUnivTopNoteHtml("결과 비율")}</div>
+              </div>
+              <div class="control-stack">
+                <div class="control-group">
+                  <div class="control-group-label">표시 방식</div>
+                  <div class="segmented-control" data-univ-top-mode-group="${scope}" aria-label="대학 TOP 20 차트 표시 방식">
+                    <button type="button" class="segmented-btn active" data-univ-top-mode="ratio" aria-pressed="true">비율 보기</button>
+                    <button type="button" class="segmented-btn" data-univ-top-mode="count" aria-pressed="false">건수 보기</button>
+                  </div>
+                </div>
+                <div class="control-group">
+                  <div class="control-group-label">정렬 기준</div>
+                  <div class="segmented-control" data-univ-top-sort-group="${scope}" aria-label="대학 TOP 20 정렬 기준">
+                    <button type="button" class="segmented-btn active" data-univ-top-sort="total" aria-pressed="true">지원건수순</button>
+                    <button type="button" class="segmented-btn" data-univ-top-sort="allPassRate" aria-pressed="false">합격률순</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="univ-top-chart-${scope}" class="plot-container"></div>
+          </div>
+        </div>`;
+    }
     function buildUnivDirectoryNoteHtml() {
       return `대학명을 검색해 원하는 대학을 여러 개 추가한 뒤 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다. 합격건과 합격률은 충원합격을 포함하며, 검색 결과 정렬 기준은 오른쪽에서 바꿀 수 있습니다.`;
     }
@@ -5839,8 +5992,8 @@ body.protected-export-locked {
           renderState.auxRendererMap[`region-table-${pid}`] = () => renderRegionStats(records, pid);
         }
       });
-      if (document.getElementById("univ-top-chart")) {
-        renderState.auxRendererMap["univ-top-chart"] = () => renderUnivTop(records);
+      if (document.getElementById("univ-top-chart-global")) {
+        renderState.auxRendererMap["univ-top-chart-global"] = () => renderUnivTop(records, "global");
 	      }
 	      const yrs = metaYears || [];
 	      const all = allRecords || records;
@@ -6525,26 +6678,36 @@ body.protected-export-locked {
     }
 
     function syncUnivTopModeButtons() {
-      const group = document.querySelector("[data-univ-top-mode-group]");
-      if (!group) return;
       const mode = getUnivTopMode();
-      group.querySelectorAll("[data-univ-top-mode]").forEach((btn) => {
-        const active = btn.dataset.univTopMode === mode;
-        btn.classList.toggle("active", active);
-        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      document.querySelectorAll("[data-univ-top-mode-group]").forEach((group) => {
+        group.querySelectorAll("[data-univ-top-mode]").forEach((btn) => {
+          const active = btn.dataset.univTopMode === mode;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-pressed", active ? "true" : "false");
+        });
       });
     }
 
     function updateUnivTopNote() {
-      const noteEl = document.getElementById("univ-top-note");
-      if (!noteEl) return;
       const modeText = getUnivTopMode() === "ratio" ? "결과 비율" : "절대 건수";
-      noteEl.innerHTML = buildUnivTopNoteHtml(modeText);
+      const html = buildUnivTopNoteHtml(modeText);
+      document.querySelectorAll("[data-univ-top-note]").forEach((noteEl) => {
+        noteEl.innerHTML = html;
+      });
     }
 
-    function bindUnivTopModeToggle(records) {
-      const group = document.querySelector("[data-univ-top-mode-group]");
+    function rerenderAllUnivTopCharts() {
+      univTopRecordsByScope.forEach((records, scope) => {
+        if (document.getElementById(`univ-top-chart-${scope}`)) {
+          renderUnivTop(records, scope);
+        }
+      });
+    }
+
+    function bindUnivTopModeToggle(records, scope = "global") {
+      const group = document.querySelector(`[data-univ-top-mode-group="${scope}"]`);
       if (!group) return;
+      univTopRecordsByScope.set(scope, records);
       syncUnivTopModeButtons();
       updateUnivTopNote();
       group.querySelectorAll("[data-univ-top-mode]").forEach((btn) => {
@@ -6554,7 +6717,7 @@ body.protected-export-locked {
           filterState.univTopDisplayMode = nextMode;
           syncUnivTopModeButtons();
           updateUnivTopNote();
-          renderUnivTop(records);
+          rerenderAllUnivTopCharts();
         });
       });
     }
@@ -6564,19 +6727,20 @@ body.protected-export-locked {
     }
 
     function syncUnivTopSortButtons() {
-      const group = document.querySelector("[data-univ-top-sort-group]");
-      if (!group) return;
       const sortKey = getUnivTopSort();
-      group.querySelectorAll("[data-univ-top-sort]").forEach((btn) => {
-        const active = btn.dataset.univTopSort === sortKey;
-        btn.classList.toggle("active", active);
-        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      document.querySelectorAll("[data-univ-top-sort-group]").forEach((group) => {
+        group.querySelectorAll("[data-univ-top-sort]").forEach((btn) => {
+          const active = btn.dataset.univTopSort === sortKey;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-pressed", active ? "true" : "false");
+        });
       });
     }
 
-    function bindUnivTopSortToggle(records) {
-      const group = document.querySelector("[data-univ-top-sort-group]");
+    function bindUnivTopSortToggle(records, scope = "global") {
+      const group = document.querySelector(`[data-univ-top-sort-group="${scope}"]`);
       if (!group) return;
+      univTopRecordsByScope.set(scope, records);
       syncUnivTopSortButtons();
       updateUnivTopNote();
       group.querySelectorAll("[data-univ-top-sort]").forEach((btn) => {
@@ -6586,7 +6750,7 @@ body.protected-export-locked {
           filterState.univTopSortKey = nextSort;
           syncUnivTopSortButtons();
           updateUnivTopNote();
-          renderUnivTop(records);
+          rerenderAllUnivTopCharts();
         });
       });
     }
@@ -6976,6 +7140,12 @@ body.protected-export-locked {
         ${block.html}
       </div>`;
 
+      const deptUnivSet = new Set(deptRecords.map((r) => r.univ || "미상"));
+      const showDeptTop20 = deptUnivSet.size >= 2;
+      if (showDeptTop20) {
+        html += buildUnivTopSectionHtml("dept");
+      }
+
       if (years.length > 1) {
         html += `<div class="dept-container section-year-comparison">
           <div class="dept-header">연도별 비교</div>
@@ -6999,6 +7169,14 @@ body.protected-export-locked {
         renderYearApptypeTrendTable(deptAllRecords, years, "dept-analytics-year-apptype");
       }
 
+      if (showDeptTop20) {
+        renderUnivTop(deptRecords, "dept");
+        bindUnivTopModeToggle(deptRecords, "dept");
+        bindUnivTopSortToggle(deptRecords, "dept");
+      } else {
+        univTopRecordsByScope.delete("dept");
+      }
+
       bindGradeBandModeTogglesScoped(contentEl, deptRecords);
       bindApptypeBandModeTogglesScoped(contentEl, deptRecords);
       bindPlotExportButtons(contentEl);
@@ -7014,6 +7192,7 @@ body.protected-export-locked {
       if (listView) listView.hidden = false;
       if (analyticsView) analyticsView.hidden = true;
       analyticsViewState.deptTab = { active: false, entries: [] };
+      univTopRecordsByScope.delete("dept");
       cleanupAnalyticsPlots(contentEl);
       if (contentEl) contentEl.innerHTML = "";
     }
@@ -8240,19 +8419,75 @@ body.protected-export-locked {
       </div>`;
     }
 
-    function getDetailDeptOptions(records = []) {
-      const deptSet = new Set();
+    function getDetailFilterOptions(records = [], rowKey) {
+      const set = new Set();
       records.forEach((record) => {
-        deptSet.add(record.dept || "미상");
+        set.add(record[rowKey] || "미상");
       });
-      return Array.from(deptSet).sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
+      return Array.from(set).sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
+    }
+
+    function getDetailDeptOptions(records = []) {
+      return getDetailFilterOptions(records, "dept");
+    }
+
+    function isPassResult(result) {
+      return result === "합격" || result === "충원합격";
     }
 
     function getFilteredDetailRowsForView(view, detailRows = []) {
       if (view && (view.disableDeptFilter || view.type === "student")) return detailRows;
-      const df = Array.isArray(view?.deptFilter) ? view.deptFilter : [];
-      if (!df.length) return detailRows;
-      return detailRows.filter((record) => df.includes(record.dept || "미상"));
+      const deptF = Array.isArray(view?.deptFilter) ? view.deptFilter : [];
+      const univF = Array.isArray(view?.univFilter) ? view.univFilter : [];
+      const subtypeF = Array.isArray(view?.subtypeFilter) ? view.subtypeFilter : [];
+      const resultF = view?.resultFilter === "pass" || view?.resultFilter === "fail" ? view.resultFilter : "all";
+      if (!deptF.length && !univF.length && !subtypeF.length && resultF === "all") return detailRows;
+      return detailRows.filter((record) => {
+        if (deptF.length && !deptF.includes(record.dept || "미상")) return false;
+        if (univF.length && !univF.includes(record.univ || "미상")) return false;
+        if (subtypeF.length && !subtypeF.includes(record.subtype || "미상")) return false;
+        if (resultF === "pass" && !isPassResult(record.result)) return false;
+        if (resultF === "fail" && isPassResult(record.result)) return false;
+        return true;
+      });
+    }
+
+    function buildMultiComboHtml(kind, allOptions, selectedValues) {
+      const meta = COMBO_KINDS[kind];
+      if (!meta) return "";
+      const selected = Array.isArray(selectedValues) ? selectedValues : [];
+      const hasSelection = selected.length > 0;
+      return `<div class="detail-filter-group">
+        <label class="detail-filter-label">${meta.label}</label>
+        <div class="dept-combo" id="combo-${kind}" data-combo-kind="${kind}">
+          <div class="dept-combo-input-area" data-combo-area="true">
+            ${selected.map(v => `<span class="dept-combo-tag" data-combo-value="${escapeHtml(v)}"><span class="dept-combo-tag-label">${escapeHtml(v)}</span><button type="button" class="dept-combo-tag-remove" data-combo-remove="${escapeHtml(v)}" title="제거">×</button></span>`).join("")}
+            ${hasSelection ? `<button type="button" class="dept-combo-clear" data-combo-clear-all="true" title="전체 해제">초기화</button>` : ""}
+            <input class="dept-combo-input" data-combo-input="true" placeholder="${hasSelection ? "" : meta.placeholder}" autocomplete="off" />
+          </div>
+          <div class="dept-combo-dropdown" data-combo-dropdown="true">
+            ${allOptions.map(v => {
+              const sel = selected.includes(v);
+              return `<div class="dept-combo-option${sel ? " is-selected" : ""}" data-combo-option="${escapeHtml(v)}"><span class="check-icon">${sel ? "✓" : ""}</span><span>${escapeHtml(v)}</span></div>`;
+            }).join("")}
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function buildResultToggleHtml(resultFilter) {
+      const current = resultFilter === "pass" || resultFilter === "fail" ? resultFilter : "all";
+      const buttons = [
+        { value: "all", label: "전체" },
+        { value: "pass", label: "합격" },
+        { value: "fail", label: "불합격" },
+      ];
+      return `<div class="detail-filter-group">
+        <label class="detail-filter-label">결과</label>
+        <div class="result-toggle" role="group">
+          ${buttons.map(b => `<button type="button" class="result-toggle-btn${current === b.value ? " is-active" : ""}" data-result-filter="${b.value}">${b.label}</button>`).join("")}
+        </div>
+      </div>`;
     }
 
     function buildDetailToolbarHtml(options = {}) {
@@ -8262,40 +8497,43 @@ body.protected-export-locked {
         filteredCount = totalCount,
         deptOptions = [],
         deptFilter = [],
-        showDeptFilter = true,
+        univOptions = [],
+        univFilter = [],
+        subtypeOptions = [],
+        subtypeFilter = [],
+        resultFilter = "all",
+        showFilters = true,
       } = options;
-      const selectedDepts = Array.isArray(deptFilter) ? deptFilter : [];
-      const hasDeptFilter = selectedDepts.length > 0;
+      const selDept = Array.isArray(deptFilter) ? deptFilter : [];
+      const selUniv = Array.isArray(univFilter) ? univFilter : [];
+      const selSubtype = Array.isArray(subtypeFilter) ? subtypeFilter : [];
+      const currentResult = resultFilter === "pass" || resultFilter === "fail" ? resultFilter : "all";
+      const activeBadges = [];
+      if (currentResult === "pass") activeBadges.push("합격만");
+      else if (currentResult === "fail") activeBadges.push("불합격만");
+      if (selUniv.length) activeBadges.push(`대학 ${selUniv.length}개`);
+      if (selSubtype.length) activeBadges.push(`세부유형 ${selSubtype.length}개`);
+      if (selDept.length) activeBadges.push(`모집단위 ${selDept.length}개`);
       const totalLabel = totalCount.toLocaleString();
       const filteredLabel = filteredCount.toLocaleString();
       const rangeText = pagination && filteredCount
         ? `${(pagination.startIndex + 1).toLocaleString()}~${pagination.endIndex.toLocaleString()}건`
         : `${filteredLabel}건`;
-      const metaText = hasDeptFilter
-        ? `모집단위 ${selectedDepts.length}개 선택 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`} · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`
+      const metaText = activeBadges.length
+        ? `${activeBadges.join(" · ")} 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`} · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`
         : `총 ${filteredLabel}건 중 ${rangeText} 표시 · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`;
-      const deptFilterHtml = showDeptFilter && deptOptions.length > 1 ? `<div class="detail-filter-group">
-        <label class="detail-filter-label">모집단위</label>
-        <div class="dept-combo" id="dept-combo">
-          <div class="dept-combo-input-area" data-dept-combo-area="true">
-            ${selectedDepts.map(d => `<span class="dept-combo-tag" data-dept="${escapeHtml(d)}"><span class="dept-combo-tag-label">${escapeHtml(d)}</span><button type="button" class="dept-combo-tag-remove" data-dept-remove="${escapeHtml(d)}" title="제거">×</button></span>`).join("")}
-            ${hasDeptFilter ? `<button type="button" class="dept-combo-clear" data-dept-clear-all="true" title="전체 해제">초기화</button>` : ""}
-            <input class="dept-combo-input" data-dept-combo-input="true" placeholder="${hasDeptFilter ? "" : "모집단위 검색..."}" autocomplete="off" />
-          </div>
-          <div class="dept-combo-dropdown" id="dept-combo-dropdown">
-            ${deptOptions.map(d => {
-              const sel = selectedDepts.includes(d);
-              return `<div class="dept-combo-option${sel ? " is-selected" : ""}" data-dept-option="${escapeHtml(d)}"><span class="check-icon">${sel ? "✓" : ""}</span><span>${escapeHtml(d)}</span></div>`;
-            }).join("")}
-          </div>
-        </div>
-      </div>` : "";
+      const filtersHtml = !showFilters ? "" : [
+        buildResultToggleHtml(currentResult),
+        univOptions.length > 1 ? buildMultiComboHtml("univ", univOptions, selUniv) : "",
+        subtypeOptions.length > 1 ? buildMultiComboHtml("subtype", subtypeOptions, selSubtype) : "",
+        deptOptions.length > 1 ? buildMultiComboHtml("dept", deptOptions, selDept) : "",
+      ].filter(Boolean).join("");
       const paginationHtml = buildDetailPaginationHtml(pagination, filteredCount);
-      if (!deptFilterHtml && !paginationHtml) return "";
+      if (!filtersHtml && !paginationHtml) return "";
       return `<div class="detail-toolbar">
         <div class="detail-toolbar-main">
           <div class="detail-toolbar-meta">${metaText}</div>
-          ${deptFilterHtml}
+          ${filtersHtml}
         </div>
         ${paginationHtml}
       </div>`;
@@ -8476,7 +8714,7 @@ body.protected-export-locked {
       };
     }
 
-    function getDetailTableColumns(includeUniv = false, { hideRural = false } = {}) {
+    function getDetailTableColumns(includeUniv = false) {
       const columns = [
         { header: "학년도", colClass: "detail-col-year", value: (r) => r.academic_year || "-" },
       ];
@@ -8493,9 +8731,6 @@ body.protected-export-locked {
         { header: "전교과등급", colClass: "detail-col-grade", render: (r) => renderDetailAllSubjGradeCell(r) },
         { header: "환산(일반)", colClass: "detail-col-conv", render: (r) => renderDetailConvGradeCell(r) },
       );
-      if (!hideRural) {
-        columns.push({ header: "농어촌", colClass: "detail-col-rural", value: (r) => r.is_rural || "-" });
-      }
       return columns;
     }
 
@@ -8546,10 +8781,10 @@ body.protected-export-locked {
         filteredCount = records.length,
         prependHtml = "",
         showDeptFilter = true,
-        hideRural = false,
+        showFilters = showDeptFilter,
       } = options;
       if (!records.length) return '<div class="empty">데이터 없음</div>';
-      const columns = getDetailTableColumns(includeUniv, { hideRural });
+      const columns = getDetailTableColumns(includeUniv);
       const rows = records.map((r) => {
         const rowClassParts = [
           r.result === "합격" ? "detail-row-pass" : r.result === "충원합격" ? "detail-row-wait" : "",
@@ -8574,7 +8809,12 @@ body.protected-export-locked {
         filteredCount,
         deptOptions: options.deptOptions || [],
         deptFilter: Array.isArray(options.deptFilter) ? options.deptFilter : [],
-        showDeptFilter,
+        univOptions: options.univOptions || [],
+        univFilter: Array.isArray(options.univFilter) ? options.univFilter : [],
+        subtypeOptions: options.subtypeOptions || [],
+        subtypeFilter: Array.isArray(options.subtypeFilter) ? options.subtypeFilter : [],
+        resultFilter: options.resultFilter || "all",
+        showFilters,
       });
       return `<div class="detail-modal-content">
         ${prependHtml}
@@ -8755,7 +8995,6 @@ body.protected-export-locked {
           subtitle: subtitleParts.join(" · "),
           tableOptions: {
             includeUniv: true,
-            hideRural: true,
             prependHtml: buildStudentSubjectGradeSummaryHtml(view.student, detailRows) + buildStudentCsatSummaryHtml(view.student, detailRows),
             showDeptFilter: false,
           },
@@ -8823,7 +9062,9 @@ body.protected-export-locked {
       }
       const detailRows = getDetailRowsForView(currentView);
       const filteredRows = getFilteredDetailRowsForView(currentView, detailRows);
-      const deptOptions = getDetailDeptOptions(detailRows);
+      const deptOptions = getDetailFilterOptions(detailRows, "dept");
+      const univOptions = getDetailFilterOptions(detailRows, "univ");
+      const subtypeOptions = getDetailFilterOptions(detailRows, "subtype");
       const pagination = getDetailModalPagination(currentView, filteredRows.length);
       const visibleRows = pagination.totalPages > 1
         ? filteredRows.slice(pagination.startIndex, pagination.endIndex)
@@ -8841,6 +9082,11 @@ body.protected-export-locked {
         filteredCount: filteredRows.length,
         deptOptions,
         deptFilter: Array.isArray(currentView.deptFilter) ? currentView.deptFilter : [],
+        univOptions,
+        univFilter: Array.isArray(currentView.univFilter) ? currentView.univFilter : [],
+        subtypeOptions,
+        subtypeFilter: Array.isArray(currentView.subtypeFilter) ? currentView.subtypeFilter : [],
+        resultFilter: currentView.resultFilter || "all",
       });
       detailModalEl.hidden = false;
       document.body.style.overflow = "hidden";
@@ -8931,94 +9177,124 @@ body.protected-export-locked {
       renderDetailModalView();
     }
 
-    function handleDetailDeptFilterChange(deptFilters) {
+    function handleDetailComboFilterChange(kind, values) {
+      const meta = COMBO_KINDS[kind];
+      if (!meta) return;
       const currentView = modalState.viewStack[modalState.viewStack.length - 1];
       if (!currentView) return;
-      currentView.deptFilter = Array.isArray(deptFilters) ? [...deptFilters] : [];
+      currentView[meta.filterKey] = Array.isArray(values) ? [...values] : [];
       currentView.page = 1;
       renderDetailModalView();
     }
 
-    /* ── Dept combo box management ── */
-    function openDeptCombo() {
-      const combo = document.getElementById("dept-combo");
+    function handleDetailDeptFilterChange(deptFilters) {
+      handleDetailComboFilterChange("dept", deptFilters);
+    }
+
+    function handleDetailResultFilterChange(value) {
+      const currentView = modalState.viewStack[modalState.viewStack.length - 1];
+      if (!currentView) return;
+      const next = value === "pass" || value === "fail" ? value : "all";
+      if (currentView.resultFilter === next) return;
+      currentView.resultFilter = next;
+      currentView.page = 1;
+      renderDetailModalView();
+    }
+
+    /* ── Multi-select combo box management (dept / univ / subtype) ── */
+    function openCombo(kind) {
+      const meta = COMBO_KINDS[kind];
+      if (!meta) return;
+      if (comboState.open && comboState.kind === kind) return;
+      if (comboState.open && comboState.kind !== kind) closeCombo();
+      const combo = document.getElementById(`combo-${kind}`);
       if (!combo) return;
-      if (deptComboState.open) return;
-      const dropdown = combo.querySelector("#dept-combo-dropdown");
-      const inputArea = combo.querySelector("[data-dept-combo-area]");
-      const input = combo.querySelector("[data-dept-combo-input]");
+      const dropdown = combo.querySelector("[data-combo-dropdown]");
+      const inputArea = combo.querySelector("[data-combo-area]");
+      const input = combo.querySelector("[data-combo-input]");
       if (!dropdown || !inputArea || !input) return;
       const cv = modalState.viewStack[modalState.viewStack.length - 1];
-      deptComboState.pending = Array.isArray(cv?.deptFilter) ? [...cv.deptFilter] : [];
-      deptComboState.open = true;
-      deptComboState.searchText = "";
+      comboState.pending = Array.isArray(cv?.[meta.filterKey]) ? [...cv[meta.filterKey]] : [];
+      comboState.kind = kind;
+      comboState.open = true;
+      comboState.searchText = "";
       dropdown.classList.add("is-open");
       inputArea.classList.add("is-open");
       input.value = "";
       input.placeholder = "검색어 입력...";
       input.focus();
     }
-    function closeDeptCombo() {
-      if (!deptComboState.open) return;
-      deptComboState.open = false;
-      const combo = document.getElementById("dept-combo");
-      if (combo) {
-        const dd = combo.querySelector("#dept-combo-dropdown");
-        const ia = combo.querySelector("[data-dept-combo-area]");
-        if (dd) dd.classList.remove("is-open");
-        if (ia) ia.classList.remove("is-open");
+    function closeCombo() {
+      if (!comboState.open) return;
+      const kind = comboState.kind;
+      const meta = kind ? COMBO_KINDS[kind] : null;
+      comboState.open = false;
+      if (kind) {
+        const combo = document.getElementById(`combo-${kind}`);
+        if (combo) {
+          const dd = combo.querySelector("[data-combo-dropdown]");
+          const ia = combo.querySelector("[data-combo-area]");
+          if (dd) dd.classList.remove("is-open");
+          if (ia) ia.classList.remove("is-open");
+        }
       }
-      if (deptComboState.pending) {
+      if (meta && comboState.pending) {
         const cv = modalState.viewStack[modalState.viewStack.length - 1];
-        const current = Array.isArray(cv?.deptFilter) ? cv.deptFilter : [];
-        const pending = deptComboState.pending;
+        const current = Array.isArray(cv?.[meta.filterKey]) ? cv[meta.filterKey] : [];
+        const pending = comboState.pending;
         const changed = current.length !== pending.length || current.slice().sort().join("\0") !== pending.slice().sort().join("\0");
-        if (changed) handleDetailDeptFilterChange(pending);
+        if (changed) handleDetailComboFilterChange(kind, pending);
       }
-      deptComboState.pending = null;
-      deptComboState.searchText = "";
+      comboState.kind = null;
+      comboState.pending = null;
+      comboState.searchText = "";
     }
-    function syncDeptComboDOM() {
-      const combo = document.getElementById("dept-combo");
-      if (!combo || !deptComboState.pending) return;
-      const pending = deptComboState.pending;
-      const inputArea = combo.querySelector("[data-dept-combo-area]");
-      const input = combo.querySelector("[data-dept-combo-input]");
+    function syncComboDOM() {
+      const kind = comboState.kind;
+      if (!kind) return;
+      const combo = document.getElementById(`combo-${kind}`);
+      if (!combo || !comboState.pending) return;
+      const pending = comboState.pending;
+      const inputArea = combo.querySelector("[data-combo-area]");
+      const input = combo.querySelector("[data-combo-input]");
       if (!inputArea || !input) return;
       inputArea.querySelectorAll(".dept-combo-tag, .dept-combo-clear").forEach(el => el.remove());
-      pending.forEach(d => {
+      pending.forEach(v => {
         const tag = document.createElement("span");
         tag.className = "dept-combo-tag";
-        tag.dataset.dept = d;
-        tag.innerHTML = `<span class="dept-combo-tag-label">${escapeHtml(d)}</span><button type="button" class="dept-combo-tag-remove" data-dept-remove="${escapeHtml(d)}" title="제거">×</button>`;
+        tag.dataset.comboValue = v;
+        tag.innerHTML = `<span class="dept-combo-tag-label">${escapeHtml(v)}</span><button type="button" class="dept-combo-tag-remove" data-combo-remove="${escapeHtml(v)}" title="제거">×</button>`;
         inputArea.insertBefore(tag, input);
       });
       if (pending.length) {
         const clearBtn = document.createElement("button");
         clearBtn.type = "button";
         clearBtn.className = "dept-combo-clear";
-        clearBtn.dataset.deptClearAll = "true";
+        clearBtn.dataset.comboClearAll = "true";
         clearBtn.title = "전체 해제";
         clearBtn.textContent = "초기화";
         inputArea.insertBefore(clearBtn, input);
       }
       input.placeholder = pending.length ? "" : "검색어 입력...";
-      combo.querySelectorAll("[data-dept-option]").forEach(opt => {
-        const dept = opt.dataset.deptOption;
-        const isSel = pending.includes(dept);
+      combo.querySelectorAll("[data-combo-option]").forEach(opt => {
+        const value = opt.dataset.comboOption;
+        const isSel = pending.includes(value);
         opt.classList.toggle("is-selected", isSel);
         const icon = opt.querySelector(".check-icon");
         if (icon) icon.textContent = isSel ? "✓" : "";
       });
     }
-    function filterDeptComboDropdown(searchText) {
-      const dropdown = document.getElementById("dept-combo-dropdown");
+    function filterComboDropdown(searchText) {
+      const kind = comboState.kind;
+      if (!kind) return;
+      const combo = document.getElementById(`combo-${kind}`);
+      const dropdown = combo?.querySelector("[data-combo-dropdown]");
       if (!dropdown) return;
       const q = (searchText || "").trim().toLowerCase();
       let visibleCount = 0;
       dropdown.querySelectorAll(".dept-combo-option").forEach(opt => {
-        const dept = (opt.dataset.deptOption || "").toLowerCase();
-        const match = !q || dept.includes(q);
+        const value = (opt.dataset.comboOption || "").toLowerCase();
+        const match = !q || value.includes(q);
         opt.style.display = match ? "" : "none";
         if (match) visibleCount++;
       });
@@ -9095,9 +9371,10 @@ body.protected-export-locked {
       });
     }
 
-    function renderUnivTop(records) {
-      const univTopEl = document.getElementById("univ-top-chart");
+    function renderUnivTop(records, scope = "global") {
+      const univTopEl = document.getElementById(`univ-top-chart-${scope}`);
       if (!univTopEl) return;
+      univTopRecordsByScope.set(scope, records);
       const mode = getUnivTopMode();
       const sortKey = getUnivTopSort();
       syncUnivTopModeButtons();

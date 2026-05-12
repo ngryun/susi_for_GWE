@@ -522,6 +522,36 @@
       padding-left: 4px;
       padding-right: 4px;
     }
+    .year-table-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+    .year-table-export-btn {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #1e293b;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .year-table-export-btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .year-table-export-btn:active {
+      background: #e2e8f0;
+    }
+    .year-table-export-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     .year-trend-cell {
       display: grid;
       gap: 6px;
@@ -805,6 +835,9 @@
       vertical-align: top;
       background: var(--surface);
     }
+    .trend-table td {
+      height: 1px;
+    }
     .trend-table th {
       position: sticky;
       top: 0;
@@ -876,6 +909,7 @@
     }
     .trend-cell-core {
       min-height: 108px;
+      height: 100%;
       padding: 12px 14px;
     }
     .trend-cell-core.is-compact {
@@ -928,16 +962,13 @@
       transition: background-color 0.15s ease, box-shadow 0.15s ease;
     }
     .trend-app-cell.is-pass {
-      background: rgba(5, 150, 105, 0.10);
-      box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.08);
+      background: rgba(5, 150, 105, 0.16);
     }
     .trend-app-cell.is-wait {
-      background: rgba(217, 119, 6, 0.11);
-      box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.09);
+      background: rgba(217, 119, 6, 0.16);
     }
     .trend-app-cell.is-fail {
-      background: rgba(220, 38, 38, 0.09);
-      box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.08);
+      background: transparent;
     }
     .trend-support-card {
       display: grid;
@@ -1205,6 +1236,7 @@
       flex: 1 1 360px;
     }
     .detail-toolbar-meta {
+      flex-basis: 100%;
       min-width: 0;
       font-size: 12px;
       line-height: 1.5;
@@ -1299,6 +1331,36 @@
       transition: background .15s;
     }
     .dept-combo-clear:hover { background: #e2e8f0; color: #334155; }
+    /* Result filter (전체/합격/불합격) toggle group */
+    .result-toggle {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .result-toggle-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 7px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      border-right: 1px solid #e2e8f0;
+    }
+    .result-toggle-btn:last-child { border-right: none; }
+    .result-toggle-btn:hover { background: #f1f5f9; color: #1e293b; }
+    .result-toggle-btn.is-active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .result-toggle-btn.is-active:hover { background: #1d4ed8; }
     .detail-table-wrap {
       position: relative;
       isolation: isolate;
@@ -1360,7 +1422,6 @@
     .detail-table col.detail-col-register { width: 64px; }
     .detail-table col.detail-col-grade { width: 94px; }
     .detail-table col.detail-col-enrollment { width: 72px; }
-    .detail-table col.detail-col-rural { width: 56px; }
     .detail-table col.detail-col-selection { width: 136px; }
     .detail-table col.detail-col-conv { width: 110px; }
     .detail-table col.detail-col-grade-conv { width: 110px; }
@@ -1370,7 +1431,6 @@
     .detail-col-register,
     .detail-col-grade,
     .detail-col-enrollment,
-    .detail-col-rural,
     .detail-col-conv,
     .detail-col-grade-conv {
       text-align: center;
@@ -2344,6 +2404,8 @@
         max-width: none;
       }
       .dept-combo { min-width: 0; max-width: none; width: 100%; }
+      .result-toggle { width: 100%; }
+      .result-toggle-btn { flex: 1; padding: 8px 10px; }
       .detail-csat-grid {
         grid-template-columns: 1fr;
       }
