@@ -698,6 +698,56 @@
       gap: 10px;
       margin-top: 16px;
     }
+    .condition-query-card {
+      margin-bottom: 16px;
+    }
+    .condition-query-summary {
+      margin-top: 12px;
+    }
+    .condition-summary-empty {
+      padding: 12px 14px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-alt);
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .condition-summary-main {
+      padding: 12px 14px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: var(--radius);
+      background: rgba(15, 118, 110, 0.05);
+    }
+    .condition-summary-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.45;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+    .condition-summary-meta {
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .condition-finder-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .condition-finder-card {
+      min-width: 0;
+    }
+    @media (max-width: 1180px) {
+      .condition-finder-grid {
+        grid-template-columns: 1fr;
+      }
+    }
     .dept-finder-toolbar {
       margin-top: 12px;
       display: flex;

@@ -242,6 +242,7 @@
     SusiApp.preloaded = SusiApp.preloaded || {};
     const comboState = { kind: null, open: false, searchText: "", pending: null };
     const univTopRecordsByScope = new Map();
+    const finderEntryCacheByRecords = new WeakMap();
     const yearTableExportRegistry = {};
     const COMBO_KINDS = {
       dept: { label: "모집단위", placeholder: "모집단위 검색...", filterKey: "deptFilter", rowKey: "dept" },
@@ -249,6 +250,7 @@
       subtype: { label: "세부유형", placeholder: "세부유형 검색...", filterKey: "subtypeFilter", rowKey: "subtype" },
     };
     const analyticsViewState = {
+      conditionTab: { active: false, criteria: null },
       univTab: { active: false, entries: [], univ: "" },
       deptTab: { active: false, entries: [] },
       subtypeTab: { active: false, entries: [] },
@@ -1494,7 +1496,7 @@
     function getCurrentReportUiState() {
       const activeTabBtn = document.querySelector("#report-tabs .tab-btn.active");
       return {
-        activeTab: activeTabBtn ? activeTabBtn.dataset.tab : "summary",
+        activeTab: normalizeReportTabName(activeTabBtn ? activeTabBtn.dataset.tab : "summary"),
         gradeBandModes: { ...filterState.gradeBandModesByPlot },
         univTopMode: filterState.univTopDisplayMode,
         univTopSort: filterState.univTopSortKey,
@@ -1506,6 +1508,10 @@
         deptFinderSelection: Array.isArray(filterState.selectedDeptKeys) ? [...filterState.selectedDeptKeys] : [],
         subtypeFinderQuery: safe(document.getElementById("subtype-finder-search")?.value),
         subtypeFinderSelection: Array.isArray(filterState.selectedSubtypeKeys) ? [...filterState.selectedSubtypeKeys] : [],
+        conditionAnalytics: {
+          active: analyticsViewState.conditionTab.active,
+          criteria: analyticsViewState.conditionTab.criteria ? JSON.parse(JSON.stringify(analyticsViewState.conditionTab.criteria)) : null,
+        },
         univAnalytics: {
           active: analyticsViewState.univTab.active,
           univ: analyticsViewState.univTab.entries[0] ? analyticsViewState.univTab.entries[0].univ : (analyticsViewState.univTab.univ || ""),
@@ -1859,16 +1865,36 @@ body.protected-export-locked {
     }
     function buildReportTabLabel(tabName = "") {
       if (tabName === "summary") return "전체데이터요약";
+      if (tabName === "condition") return "조건별조회";
       if (tabName === "univ") return "대학별조회";
       if (tabName === "dept") return "학과별조회";
       if (tabName === "subtype") return "전형세부유형별조회";
       if (tabName === "trend") return "지원경향조회";
       return "현재페이지";
     }
+    function normalizeReportTabName(tabName = "summary") {
+      if (tabName === "univ" || tabName === "dept" || tabName === "subtype") return "condition";
+      if (tabName === "summary" || tabName === "condition" || tabName === "trend") return tabName;
+      return "summary";
+    }
     function buildActivePageFilenameSuggestion() {
       const uiState = getCurrentReportUiState();
-      const activeTab = uiState.activeTab || "summary";
+      const activeTab = normalizeReportTabName(uiState.activeTab || "summary");
       const records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
+
+      if (activeTab === "condition") {
+        const criteria = uiState.conditionAnalytics && uiState.conditionAnalytics.active
+          ? normalizeConditionCriteria(uiState.conditionAnalytics.criteria, records)
+          : getSelectedConditionCriteria(records);
+        if (hasConditionCriteria(criteria)) return formatConditionCriteriaSummary(criteria);
+        const queryParts = [
+          uiState.univFinderQuery,
+          uiState.deptFinderQuery,
+          uiState.subtypeFinderQuery,
+        ].filter(Boolean);
+        if (queryParts.length) return queryParts.join("_");
+        return buildReportTabLabel(activeTab);
+      }
 
       if (activeTab === "univ") {
         if (uiState.univAnalytics && uiState.univAnalytics.active) {
@@ -1878,7 +1904,7 @@ body.protected-export-locked {
           const entries = normalizeUnivAnalyticsEntries(selection, records);
           if (entries.length) return formatUnivSelectionSummary(entries);
         }
-        const selectedEntries = getSelectedUnivEntries(makeUnivFinderEntries(records));
+        const selectedEntries = getSelectedUnivEntries(getCachedUnivFinderEntries(records));
         if (selectedEntries.length) return formatUnivSelectionSummary(selectedEntries);
         if (uiState.univFinderQuery) return uiState.univFinderQuery;
         return buildReportTabLabel(activeTab);
@@ -1888,7 +1914,7 @@ body.protected-export-locked {
         if (uiState.deptAnalytics && uiState.deptAnalytics.active && Array.isArray(uiState.deptAnalytics.entries) && uiState.deptAnalytics.entries.length) {
           return formatDeptSelectionSummary(uiState.deptAnalytics.entries);
         }
-        const selectedEntries = getSelectedDeptEntries(makeDeptFinderEntries(records, getDeptFinderGroupingMode()));
+        const selectedEntries = getSelectedDeptEntries(getCachedDeptFinderEntries(records, getDeptFinderGroupingMode()));
         if (selectedEntries.length) return formatDeptSelectionSummary(selectedEntries);
         if (uiState.deptFinderQuery) return uiState.deptFinderQuery;
         return buildReportTabLabel(activeTab);
@@ -1899,7 +1925,7 @@ body.protected-export-locked {
           const entries = normalizeSubtypeAnalyticsEntries(uiState.subtypeAnalytics.entries || [], records);
           if (entries.length) return formatSubtypeSelectionSummary(entries);
         }
-        const selectedEntries = getSelectedSubtypeEntries(makeSubtypeFinderEntries(records));
+        const selectedEntries = getSelectedSubtypeEntries(getCachedSubtypeFinderEntries(records));
         if (selectedEntries.length) return formatSubtypeSelectionSummary(selectedEntries);
         if (uiState.subtypeFinderQuery) return uiState.subtypeFinderQuery;
         return buildReportTabLabel(activeTab);
@@ -1951,13 +1977,29 @@ body.protected-export-locked {
     }
     function buildActivePageSharedExportContext() {
       const uiState = JSON.parse(JSON.stringify(getCurrentReportUiState()));
-      const activeTab = uiState.activeTab || "summary";
+      const activeTab = normalizeReportTabName(uiState.activeTab || "summary");
+      uiState.activeTab = activeTab;
       let records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
 
+      if (activeTab !== "condition") uiState.conditionAnalytics = { active: false, criteria: null };
       if (activeTab !== "univ") uiState.univAnalytics = { active: false, entries: [], univ: "" };
       if (activeTab !== "dept") uiState.deptAnalytics = { active: false, entries: [] };
       if (activeTab !== "subtype") uiState.subtypeAnalytics = { active: false, entries: [] };
       uiState.singleTabExport = { activeTab };
+
+      if (activeTab === "condition" && uiState.conditionAnalytics && uiState.conditionAnalytics.active) {
+        const criteria = normalizeConditionCriteria(uiState.conditionAnalytics.criteria, records);
+        if (hasConditionCriteria(criteria)) {
+          records = filterRecordsByConditionCriteria(records, criteria);
+          uiState.conditionAnalytics = { active: true, criteria: serializeConditionCriteria(criteria) };
+          uiState.univFinderSelection = criteria.univEntries.map((entry) => entry.key);
+          uiState.deptFinderGroupingMode = criteria.deptGroupingMode || getDeptFinderGroupingMode();
+          uiState.deptFinderSelection = criteria.deptEntries.map((entry) => entry.key);
+          uiState.subtypeFinderSelection = criteria.subtypeEntries.map((entry) => entry.key);
+        } else {
+          uiState.conditionAnalytics = { active: false, criteria: null };
+        }
+      }
 
       if (activeTab === "univ" && uiState.univAnalytics && uiState.univAnalytics.active) {
         const univSelection = Array.isArray(uiState.univAnalytics.entries) && uiState.univAnalytics.entries.length
@@ -2183,7 +2225,7 @@ body.protected-export-locked {
       if (activePageBtn) {
         activePageBtn.onclick = () => showSharedExportOptionsModal({
           title: "현재 페이지 HTML 저장",
-          description: "현재 활성 탭만 저장합니다. 대학·학과·세부유형 상세 화면이면 현재 선택 범위만 포함하고, 리스트 화면이면 현재 필터와 검색 상태를 그대로 담습니다.",
+          description: "현재 활성 탭만 저장합니다. 조건별조회 상세 화면이면 AND 조건 적용 결과만 포함하고, 리스트 화면이면 현재 필터와 검색 상태를 그대로 담습니다.",
           confirmLabel: "현재 페이지 다운로드",
           defaultFilename: buildActivePageFilenameSuggestion(),
           scope: "activePage",
@@ -2238,6 +2280,10 @@ body.protected-export-locked {
       renderState.initializedPlots = {};
       renderState.chartTableRegistry = {};
       dataState.detailViewRowsCache = new Map();
+      analyticsViewState.conditionTab = { active: false, criteria: null };
+      analyticsViewState.univTab = { active: false, entries: [], univ: "" };
+      analyticsViewState.deptTab = { active: false, entries: [] };
+      analyticsViewState.subtypeTab = { active: false, entries: [] };
       filterState.gradeBandModesByPlot = options.gradeBandModes && typeof options.gradeBandModes === "object"
         ? { ...options.gradeBandModes }
         : {};
@@ -2312,6 +2358,7 @@ body.protected-export-locked {
     }
 
     function renderFullReport(records, selectedUniv = "", activeTab = "summary", options = {}, meta = {}) {
+      activeTab = normalizeReportTabName(activeTab);
       resetLazyObservers();
       resetReportRuntimeState(records, options);
 
@@ -2362,16 +2409,12 @@ body.protected-export-locked {
             <div class="tab-bar-sticky">
               <div class="tab-bar" id="report-tabs">
                 <button type="button" class="tab-btn ${activeTab === "summary" ? "active" : ""}" data-tab="summary">전체데이터요약</button>
-                <button type="button" class="tab-btn ${activeTab === "univ" ? "active" : ""}" data-tab="univ">대학별조회</button>
-                <button type="button" class="tab-btn ${activeTab === "dept" ? "active" : ""}" data-tab="dept">학과별조회</button>
-                <button type="button" class="tab-btn ${activeTab === "subtype" ? "active" : ""}" data-tab="subtype">전형 세부유형별 조회</button>
+                <button type="button" class="tab-btn ${activeTab === "condition" ? "active" : ""}" data-tab="condition">조건별조회</button>
                 <button type="button" class="tab-btn ${activeTab === "trend" ? "active" : ""}" data-tab="trend">지원경향조회</button>
               </div>
             </div>
             <section id="tab-summary" class="tab-panel ${activeTab === "summary" ? "active" : ""}"></section>
-            <section id="tab-univ" class="tab-panel ${activeTab === "univ" ? "active" : ""}"></section>
-            <section id="tab-dept" class="tab-panel ${activeTab === "dept" ? "active" : ""}"></section>
-            <section id="tab-subtype" class="tab-panel ${activeTab === "subtype" ? "active" : ""}"></section>
+            <section id="tab-condition" class="tab-panel ${activeTab === "condition" ? "active" : ""}"></section>
             <section id="tab-trend" class="tab-panel ${activeTab === "trend" ? "active" : ""}"></section>
           </main>
         </div>`;
@@ -2380,9 +2423,7 @@ body.protected-export-locked {
       reportEl.innerHTML = header + layout;
 
       const summaryEl = document.getElementById("tab-summary");
-      const univEl = document.getElementById("tab-univ");
-      const deptEl = document.getElementById("tab-dept");
-      const subtypeEl = document.getElementById("tab-subtype");
+      const conditionEl = document.getElementById("tab-condition");
       const trendEl = document.getElementById("tab-trend");
       const univSearchQuery = typeof options.univFinderQuery === "string" ? options.univFinderQuery : "";
       const deptSearchQuery = typeof options.deptFinderQuery === "string" ? options.deptFinderQuery : "";
@@ -2412,141 +2453,134 @@ body.protected-export-locked {
         summaryEl.insertAdjacentHTML("beforeend", buildYearComparisonSection(locationFilteredAll, metaYears));
       }
 
-      univEl.innerHTML = `<div id="univ-list-view"><div class="dept-container">
-          <div class="dept-header">대학별 조회</div>
-          <div class="card">
-            <div class="card-head">
-              <div class="card-head-copy">
-                <h3>대학 검색</h3>
-                <div class="card-note">${buildUnivDirectoryNoteHtml()}</div>
-              </div>
-              <div class="control-group">
-                <div class="control-group-label">정렬 기준</div>
-                <div class="segmented-control" data-univ-directory-sort-group="global" aria-label="대학별 목록 정렬 기준">
-                  <button type="button" class="segmented-btn active" data-univ-directory-sort="total" aria-pressed="true">지원건수순</button>
-                  <button type="button" class="segmented-btn" data-univ-directory-sort="allPassRate" aria-pressed="false">합격률순</button>
-                </div>
-              </div>
-            </div>
-            <div class="directory-toolbar">
-              <div class="directory-search">
-                <label for="univ-directory-search">대학명 검색</label>
-                <input type="search" id="univ-directory-search" placeholder="대학명을 입력하세요" />
-              </div>
-            </div>
-            <div class="dept-finder-selection-panel">
-              <div class="dept-finder-selection-head">
-                <div class="dept-finder-selection-copy">
-                  <div class="dept-finder-selection-label">선택한 대학</div>
-                  <div class="dept-finder-selection-meta" id="univ-finder-selection-meta">아직 선택한 대학이 없습니다.</div>
+      conditionEl.innerHTML = `<div id="condition-list-view">
+          <div class="dept-container">
+            <div class="dept-header">조건별 조회</div>
+            <div class="section-hint">대학, 학과, 전형 세부유형을 각각 선택한 뒤 <strong>조건 적용 상세보기</strong>를 누르면 선택한 항목이 카테고리끼리 AND 조건으로 적용됩니다. 같은 카테고리 안에서 여러 개를 고르면 OR 조건입니다.</div>
+            <div class="card condition-query-card">
+              <div class="card-head">
+                <div class="card-head-copy">
+                  <h3>선택 조건</h3>
+                  <div class="card-note">예: 특정 대학과 특정 세부유형을 함께 선택하면 해당 대학 안의 해당 세부유형 지원 데이터만 분석합니다.</div>
                 </div>
                 <div class="dept-finder-actions">
-                  <button type="button" class="primary" id="univ-finder-open-btn" disabled>상세보기</button>
-                  <button type="button" id="univ-finder-clear-btn" disabled>선택 비우기</button>
+                  <button type="button" class="primary" id="condition-finder-open-btn" disabled>조건 적용 상세보기</button>
+                  <button type="button" id="condition-finder-clear-btn" disabled>전체 조건 비우기</button>
                 </div>
               </div>
-              <div id="univ-finder-selected"></div>
+              <div id="condition-query-summary" class="condition-query-summary"></div>
             </div>
-            <div id="univ-directory-table"></div>
-            <div class="dept-finder-hint" id="univ-directory-hint">대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다. 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.</div>
+            <div class="condition-finder-grid">
+              <div class="card condition-finder-card">
+                <div class="card-head">
+                  <div class="card-head-copy">
+                    <h3>대학 검색</h3>
+                    <div class="card-note">${buildUnivDirectoryNoteHtml()}</div>
+                  </div>
+                  <div class="control-group">
+                    <div class="control-group-label">정렬 기준</div>
+                    <div class="segmented-control" data-univ-directory-sort-group="condition" aria-label="대학별 목록 정렬 기준">
+                      <button type="button" class="segmented-btn active" data-univ-directory-sort="total" aria-pressed="true">지원건수순</button>
+                      <button type="button" class="segmented-btn" data-univ-directory-sort="allPassRate" aria-pressed="false">합격률순</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="directory-toolbar">
+                  <div class="directory-search">
+                    <label for="univ-directory-search">대학명 검색</label>
+                    <input type="search" id="univ-directory-search" placeholder="대학명을 입력하세요" />
+                  </div>
+                </div>
+                <div class="dept-finder-selection-panel">
+                  <div class="dept-finder-selection-head">
+                    <div class="dept-finder-selection-copy">
+                      <div class="dept-finder-selection-label">선택한 대학</div>
+                      <div class="dept-finder-selection-meta" id="univ-finder-selection-meta">아직 선택한 대학이 없습니다.</div>
+                    </div>
+                    <div class="dept-finder-actions">
+                      <button type="button" id="univ-finder-clear-btn" disabled>선택 비우기</button>
+                    </div>
+                  </div>
+                  <div id="univ-finder-selected"></div>
+                </div>
+                <div id="univ-directory-table"></div>
+                <div class="dept-finder-hint" id="univ-directory-hint">대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다. 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.</div>
+              </div>
+              <div class="card condition-finder-card">
+                <div class="card-head">
+                  <div class="card-head-copy">
+                    <h3>학과 검색</h3>
+                    <div class="card-note">기본은 같은 학과를 대학 통합으로 보여주며, 필요하면 <span class="card-note-emphasis">대학별 구분</span>으로 바꿔 조건을 좁힐 수 있습니다.</div>
+                  </div>
+                </div>
+                <div class="directory-search">
+                  <label for="dept-finder-search">학과명 검색</label>
+                  <input type="search" id="dept-finder-search" placeholder="예: 컴퓨터, 간호, 경영" />
+                </div>
+                <div class="dept-finder-toolbar">
+                  <div class="control-group">
+                    <div class="control-group-label">표시 기준</div>
+                    <div class="segmented-control" id="dept-finder-mode-group" aria-label="학과 검색 표시 기준">
+                      <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "dept" ? "active" : ""}" data-dept-finder-mode="dept">학과 통합</button>
+                      <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "univ" ? "active" : ""}" data-dept-finder-mode="univ">대학별 구분</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="dept-finder-selection-panel">
+                  <div class="dept-finder-selection-head">
+                    <div class="dept-finder-selection-copy">
+                      <div class="dept-finder-selection-label">선택한 학과</div>
+                      <div class="dept-finder-selection-meta" id="dept-finder-selection-meta">아직 선택한 학과가 없습니다.</div>
+                    </div>
+                    <div class="dept-finder-actions">
+                      <button type="button" id="dept-finder-clear-btn" disabled>선택 비우기</button>
+                    </div>
+                  </div>
+                  <div id="dept-finder-selected"></div>
+                </div>
+                <div id="dept-finder-results"></div>
+                <div class="dept-finder-hint" id="dept-finder-hint">학과명을 입력하면 해당 키워드가 들어간 학과가 표시됩니다. 이미 선택한 학과는 위 칩에서 관리할 수 있습니다.</div>
+              </div>
+              <div class="card condition-finder-card">
+                <div class="card-head">
+                  <div class="card-head-copy">
+                    <h3>세부유형 검색</h3>
+                    <div class="card-note">같은 <span class="card-note-emphasis">세부유형명</span>은 전형유형을 통합해 보여주며, 선택 시 다른 조건과 함께 AND로 적용됩니다.</div>
+                  </div>
+                </div>
+                <div class="directory-search">
+                  <label for="subtype-finder-search">세부유형명 검색</label>
+                  <input type="search" id="subtype-finder-search" placeholder="예: 일반전형, 지역인재, 학교추천" />
+                </div>
+                <div class="dept-finder-selection-panel">
+                  <div class="dept-finder-selection-head">
+                    <div class="dept-finder-selection-copy">
+                      <div class="dept-finder-selection-label">선택한 세부유형</div>
+                      <div class="dept-finder-selection-meta" id="subtype-finder-selection-meta">아직 선택한 세부유형이 없습니다.</div>
+                    </div>
+                    <div class="dept-finder-actions">
+                      <button type="button" id="subtype-finder-clear-btn" disabled>선택 비우기</button>
+                    </div>
+                  </div>
+                  <div id="subtype-finder-selected"></div>
+                </div>
+                <div id="subtype-finder-results"></div>
+                <div class="dept-finder-hint" id="subtype-finder-hint">세부유형명을 입력하면 같은 이름은 전형유형을 통합해 보여줍니다. 이미 선택한 세부유형은 위 칩에서 관리할 수 있습니다.</div>
+              </div>
+            </div>
           </div>
-        </div></div>
-        <div id="univ-analytics-view" hidden>
+        </div>
+        <div id="condition-analytics-view" hidden>
           <div class="analytics-back-bar">
-            <button type="button" class="analytics-back-btn" id="univ-analytics-back">\u2190 목록</button>
-            <div><div class="analytics-view-title" id="univ-analytics-title"></div><div class="analytics-view-subtitle" id="univ-analytics-subtitle"></div></div>
+            <button type="button" class="analytics-back-btn" id="condition-analytics-back">\u2190 조건 선택</button>
+            <div><div class="analytics-view-title" id="condition-analytics-title"></div><div class="analytics-view-subtitle" id="condition-analytics-subtitle"></div></div>
           </div>
-          <div id="univ-analytics-content"></div>
+          <div id="condition-analytics-content"></div>
         </div>`;
       const univSearchInput = document.getElementById("univ-directory-search");
       if (univSearchInput && univSearchQuery) univSearchInput.value = univSearchQuery;
-
-      deptEl.innerHTML = `<div id="dept-list-view"><div class="dept-container">
-          <div class="dept-header">학과별 조회</div>
-          <div class="card">
-            <div class="card-head">
-              <div class="card-head-copy">
-                <h3>학과 검색</h3>
-                <div class="card-note">기본은 같은 학과를 대학 통합으로 보여주며, 필요하면 <span class="card-note-emphasis">대학별 구분</span>으로 바꿔 검색한 뒤 바로 아래 선택 영역에서 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다.</div>
-              </div>
-            </div>
-            <div class="directory-search">
-              <label for="dept-finder-search">학과명 검색</label>
-              <input type="search" id="dept-finder-search" placeholder="예: 컴퓨터, 간호, 경영" />
-            </div>
-            <div class="dept-finder-toolbar">
-              <div class="control-group">
-                <div class="control-group-label">표시 기준</div>
-                <div class="segmented-control" id="dept-finder-mode-group" aria-label="학과 검색 표시 기준">
-                  <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "dept" ? "active" : ""}" data-dept-finder-mode="dept">학과 통합</button>
-                  <button type="button" class="segmented-btn ${filterState.deptFinderGroupingMode === "univ" ? "active" : ""}" data-dept-finder-mode="univ">대학별 구분</button>
-                </div>
-              </div>
-            </div>
-            <div class="dept-finder-selection-panel">
-              <div class="dept-finder-selection-head">
-                <div class="dept-finder-selection-copy">
-                  <div class="dept-finder-selection-label">선택한 학과</div>
-                  <div class="dept-finder-selection-meta" id="dept-finder-selection-meta">아직 선택한 학과가 없습니다.</div>
-                </div>
-                <div class="dept-finder-actions">
-                  <button type="button" class="primary" id="dept-finder-open-btn" disabled>상세보기</button>
-                  <button type="button" id="dept-finder-clear-btn" disabled>선택 비우기</button>
-                </div>
-              </div>
-              <div id="dept-finder-selected"></div>
-            </div>
-            <div id="dept-finder-results"></div>
-            <div class="dept-finder-hint" id="dept-finder-hint">학과명을 입력하면 해당 키워드가 들어간 학과가 표시됩니다. 이미 선택한 학과는 위 칩에서 관리할 수 있습니다.</div>
-          </div>
-        </div></div>
-        <div id="dept-analytics-view" hidden>
-          <div class="analytics-back-bar">
-            <button type="button" class="analytics-back-btn" id="dept-analytics-back">\u2190 목록</button>
-            <div><div class="analytics-view-title" id="dept-analytics-title"></div><div class="analytics-view-subtitle" id="dept-analytics-subtitle"></div></div>
-          </div>
-          <div id="dept-analytics-content"></div>
-        </div>`;
       const deptSearchInput = document.getElementById("dept-finder-search");
       if (deptSearchInput && deptSearchQuery) deptSearchInput.value = deptSearchQuery;
-
-      subtypeEl.innerHTML = `<div id="subtype-list-view"><div class="dept-container">
-          <div class="dept-header">전형 세부유형별 조회</div>
-          <div class="card">
-            <div class="card-head">
-              <div class="card-head-copy">
-                <h3>세부유형 검색</h3>
-                <div class="card-note">같은 <span class="card-note-emphasis">세부유형명</span>은 전형유형을 통합해 보여주며, 검색 후 바로 아래 선택 영역에서 <span class="card-note-emphasis">상세보기</span>로 함께 확인할 수 있습니다.</div>
-              </div>
-            </div>
-            <div class="directory-search">
-              <label for="subtype-finder-search">세부유형명 검색</label>
-              <input type="search" id="subtype-finder-search" placeholder="예: 일반전형, 지역인재, 학교추천" />
-            </div>
-            <div class="dept-finder-selection-panel">
-              <div class="dept-finder-selection-head">
-                <div class="dept-finder-selection-copy">
-                  <div class="dept-finder-selection-label">선택한 세부유형</div>
-                  <div class="dept-finder-selection-meta" id="subtype-finder-selection-meta">아직 선택한 세부유형이 없습니다.</div>
-                </div>
-                <div class="dept-finder-actions">
-                  <button type="button" class="primary" id="subtype-finder-open-btn" disabled>상세보기</button>
-                  <button type="button" id="subtype-finder-clear-btn" disabled>선택 비우기</button>
-                </div>
-              </div>
-              <div id="subtype-finder-selected"></div>
-            </div>
-            <div id="subtype-finder-results"></div>
-            <div class="dept-finder-hint" id="subtype-finder-hint">세부유형명을 입력하면 같은 이름은 전형유형을 통합해 보여줍니다. 이미 선택한 세부유형은 위 칩에서 관리할 수 있습니다.</div>
-          </div>
-        </div></div>
-        <div id="subtype-analytics-view" hidden>
-          <div class="analytics-back-bar">
-            <button type="button" class="analytics-back-btn" id="subtype-analytics-back">\u2190 목록</button>
-            <div><div class="analytics-view-title" id="subtype-analytics-title"></div><div class="analytics-view-subtitle" id="subtype-analytics-subtitle"></div></div>
-          </div>
-          <div id="subtype-analytics-content"></div>
-        </div>`;
       const subtypeSearchInput = document.getElementById("subtype-finder-search");
       if (subtypeSearchInput && subtypeSearchQuery) subtypeSearchInput.value = subtypeSearchQuery;
 
@@ -2582,6 +2616,8 @@ body.protected-export-locked {
       renderDeptFinder(records);
       bindSubtypeFinderControls(records);
       renderSubtypeFinder(records);
+      bindConditionQueryControls(records);
+      renderConditionQuerySummary(records);
       renderStudentTrend(records);
       bindPlotExportButtons(reportEl);
       bindPlotTableButtons(reportEl);
@@ -2590,22 +2626,28 @@ body.protected-export-locked {
       initLazyRendering(records, metaAllRecords, metaYears);
 
       // 분석 뷰 뒤로가기 바인딩
-      document.getElementById("univ-analytics-back")?.addEventListener("click", hideUnivAnalytics);
-      document.getElementById("dept-analytics-back")?.addEventListener("click", hideDeptAnalytics);
-      document.getElementById("subtype-analytics-back")?.addEventListener("click", hideSubtypeAnalytics);
+      document.getElementById("condition-analytics-back")?.addEventListener("click", hideConditionAnalytics);
 
       // 글로벌 필터 재렌더 시 분석 뷰 상태 복원
-      if (options.univAnalytics && options.univAnalytics.active) {
+      if (options.conditionAnalytics && options.conditionAnalytics.active) {
+        showConditionAnalytics(options.conditionAnalytics.criteria, records, metaAllRecords, metaYears);
+      } else if (options.univAnalytics && options.univAnalytics.active) {
         const univSelection = Array.isArray(options.univAnalytics.entries) && options.univAnalytics.entries.length
           ? options.univAnalytics.entries
           : (options.univAnalytics.univ || "");
-        showUnivAnalytics(univSelection, records, metaAllRecords, metaYears);
-      }
-      if (options.deptAnalytics && options.deptAnalytics.active) {
-        showDeptAnalytics(options.deptAnalytics.entries, records, metaAllRecords, metaYears);
-      }
-      if (options.subtypeAnalytics && options.subtypeAnalytics.active) {
-        showSubtypeAnalytics(options.subtypeAnalytics.entries, records, metaAllRecords, metaYears);
+        const criteria = normalizeConditionCriteria({ univKeys: normalizeUnivAnalyticsEntries(univSelection, records).map((entry) => entry.key) }, records);
+        showConditionAnalytics(criteria, records, metaAllRecords, metaYears);
+      } else if (options.deptAnalytics && options.deptAnalytics.active) {
+        const criteria = normalizeConditionCriteria({
+          deptKeys: (Array.isArray(options.deptAnalytics.entries) ? options.deptAnalytics.entries : []).map((entry) => entry.key).filter(Boolean),
+          deptGroupingMode: options.deptFinderGroupingMode || getDeptFinderGroupingMode(),
+        }, records);
+        showConditionAnalytics(criteria, records, metaAllRecords, metaYears);
+      } else if (options.subtypeAnalytics && options.subtypeAnalytics.active) {
+        const criteria = normalizeConditionCriteria({
+          subtypeKeys: normalizeSubtypeAnalyticsEntries(options.subtypeAnalytics.entries || [], records).map((entry) => entry.key),
+        }, records);
+        showConditionAnalytics(criteria, records, metaAllRecords, metaYears);
       }
     }
 
@@ -2993,6 +3035,7 @@ body.protected-export-locked {
     }
 
     function setActiveTab(tabName) {
+      tabName = normalizeReportTabName(tabName);
       document.querySelectorAll("#report-tabs .tab-btn").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
       });
@@ -3006,6 +3049,7 @@ body.protected-export-locked {
     }
 
     function restrictReportToSingleTab(tabName) {
+      tabName = normalizeReportTabName(tabName);
       if (!tabName) return;
       const tabBar = document.getElementById("report-tabs");
       if (tabBar) {
@@ -3853,6 +3897,7 @@ body.protected-export-locked {
     const ANALYTICS_UNIV_PLOT_BASE = 9000;
     const ANALYTICS_DEPT_PLOT_BASE = 9500;
     const ANALYTICS_SUBTYPE_PLOT_BASE = 9800;
+    const ANALYTICS_CONDITION_PLOT_BASE = 9900;
 
     function cleanupAnalyticsPlots(rootEl) {
       if (!rootEl) return;
@@ -4317,6 +4362,43 @@ body.protected-export-locked {
       }));
     }
 
+    function getFinderEntryCache(records) {
+      if (!Array.isArray(records)) return {};
+      let cache = finderEntryCacheByRecords.get(records);
+      if (!cache) {
+        cache = { univ: {}, dept: {}, subtype: null };
+        finderEntryCacheByRecords.set(records, cache);
+      }
+      return cache;
+    }
+
+    function getCachedUnivFinderEntries(records) {
+      const cache = getFinderEntryCache(records);
+      const sortKey = getUnivDirectorySort();
+      if (!cache.univ || cache.univ.sortKey !== sortKey) {
+        cache.univ = { sortKey, entries: makeUnivFinderEntries(records) };
+      }
+      return cache.univ.entries;
+    }
+
+    function getCachedDeptFinderEntries(records, mode = getDeptFinderGroupingMode()) {
+      const cache = getFinderEntryCache(records);
+      const cacheKey = mode === "univ" ? "univ" : DEFAULT_DEPT_FINDER_GROUPING_MODE;
+      if (!cache.dept) cache.dept = {};
+      if (!cache.dept[cacheKey]) {
+        cache.dept[cacheKey] = makeDeptFinderEntries(records, cacheKey);
+      }
+      return cache.dept[cacheKey];
+    }
+
+    function getCachedSubtypeFinderEntries(records) {
+      const cache = getFinderEntryCache(records);
+      if (!cache.subtype) {
+        cache.subtype = makeSubtypeFinderEntries(records);
+      }
+      return cache.subtype;
+    }
+
     function getSelectedUnivEntries(entries) {
       const selectedSet = new Set(filterState.selectedUnivKeys);
       return entries.filter((entry) => selectedSet.has(entry.key));
@@ -4341,20 +4423,20 @@ body.protected-export-locked {
       return `${entries[0].univ} 외 ${entries.length - 1}개`;
     }
 
-    function renderUnivDirectory(records) {
+    function renderUnivDirectory(records, options = {}) {
       const hostEl = document.getElementById("univ-directory-table");
       const selectedEl = document.getElementById("univ-finder-selected");
       const selectionMetaEl = document.getElementById("univ-finder-selection-meta");
       const openBtn = document.getElementById("univ-finder-open-btn");
       const clearBtn = document.getElementById("univ-finder-clear-btn");
       const hintEl = document.getElementById("univ-directory-hint");
-      if (!hostEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
+      if (!hostEl || !selectedEl || !selectionMetaEl || !clearBtn || !hintEl) return;
 
       syncUnivDirectorySortButtons();
       const queryEl = document.getElementById("univ-directory-search");
       const keyword = safe(queryEl ? queryEl.value : "").toLowerCase();
 
-      const entries = makeUnivFinderEntries(records);
+      const entries = getCachedUnivFinderEntries(records);
       const selectedEntries = getSelectedUnivEntries(entries);
       const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
 
@@ -4412,8 +4494,9 @@ body.protected-export-locked {
           `).join("")}</div>`
         : '<div class="dept-finder-selection-empty">아직 선택한 대학이 없습니다. 검색 결과에서 대학을 추가해 주세요.</div>';
 
-      openBtn.disabled = selectedEntries.length === 0;
+      if (openBtn) openBtn.disabled = selectedEntries.length === 0;
       clearBtn.disabled = selectedEntries.length === 0;
+      if (options.updateConditionSummary) renderConditionQuerySummary(records);
 
       hostEl.onclick = (event) => {
         const addAllTrigger = event.target instanceof Element ? event.target.closest("[data-univ-add-all]") : null;
@@ -4424,7 +4507,7 @@ body.protected-export-locked {
             .filter((item) => !selectedSet.has(item.key))
             .slice(0, DEPT_SEARCH_RESULT_LIMIT);
           const changed = addUnivFinderSelection(matches.map((item) => item.key));
-          if (changed) renderUnivDirectory(records);
+          if (changed) renderUnivDirectory(records, { updateConditionSummary: true });
           return;
         }
         const trigger = event.target instanceof Element ? event.target.closest("[data-univ-add]") : null;
@@ -4432,7 +4515,7 @@ body.protected-export-locked {
         const key = trigger.getAttribute("data-univ-add") || "";
         if (!key) return;
         const changed = addUnivFinderSelection([key]);
-        if (changed) renderUnivDirectory(records);
+        if (changed) renderUnivDirectory(records, { updateConditionSummary: true });
       };
     }
 
@@ -4465,18 +4548,18 @@ body.protected-export-locked {
           const key = trigger.getAttribute("data-univ-remove") || "";
           if (!key) return;
           filterState.selectedUnivKeys = filterState.selectedUnivKeys.filter((item) => item !== key);
-          renderUnivDirectory(records);
+          renderUnivDirectory(records, { updateConditionSummary: true });
         });
       }
       if (clearBtn) {
         clearBtn.addEventListener("click", () => {
           filterState.selectedUnivKeys = [];
-          renderUnivDirectory(records);
+          renderUnivDirectory(records, { updateConditionSummary: true });
         });
       }
       if (openBtn) {
         openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedUnivEntries(makeUnivFinderEntries(records));
+          const selectedEntries = getSelectedUnivEntries(getCachedUnivFinderEntries(records));
           if (!selectedEntries.length) return;
           showUnivAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
         });
@@ -4484,7 +4567,7 @@ body.protected-export-locked {
     }
 
     function normalizeUnivAnalyticsEntries(selection, records) {
-      const entries = makeUnivFinderEntries(records);
+      const entries = getCachedUnivFinderEntries(records);
       if (Array.isArray(selection) && selection.length) {
         const keySet = new Set(selection.map((entry) => {
           if (entry && entry.key) return entry.key;
@@ -4837,7 +4920,7 @@ body.protected-export-locked {
       if (nextMode !== "dept" && nextMode !== "univ") return;
       if (nextMode === currentMode) return;
 
-      const currentEntries = makeDeptFinderEntries(records, currentMode);
+      const currentEntries = getCachedDeptFinderEntries(records, currentMode);
       const selectedEntries = getSelectedDeptEntries(currentEntries);
       filterState.deptFinderGroupingMode = nextMode;
 
@@ -4847,7 +4930,7 @@ body.protected-export-locked {
       }
 
       const selectedMatchKeys = new Set(selectedEntries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
-      filterState.selectedDeptKeys = makeDeptFinderEntries(records, nextMode)
+      filterState.selectedDeptKeys = getCachedDeptFinderEntries(records, nextMode)
         .filter((entry) => getDeptFinderEntryMatchKeys(entry).some((matchKey) => selectedMatchKeys.has(matchKey)))
         .map((entry) => entry.key);
     }
@@ -4873,7 +4956,7 @@ body.protected-export-locked {
       return `${buildDeptFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
     }
 
-    function renderDeptFinder(records) {
+    function renderDeptFinder(records, options = {}) {
       const searchEl = document.getElementById("dept-finder-search");
       const resultsEl = document.getElementById("dept-finder-results");
       const selectedEl = document.getElementById("dept-finder-selected");
@@ -4881,12 +4964,12 @@ body.protected-export-locked {
       const openBtn = document.getElementById("dept-finder-open-btn");
       const clearBtn = document.getElementById("dept-finder-clear-btn");
       const hintEl = document.getElementById("dept-finder-hint");
-      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
+      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !clearBtn || !hintEl) return;
 
       syncDeptFinderModeButtons();
 
       const mode = getDeptFinderGroupingMode();
-      const entries = makeDeptFinderEntries(records, mode);
+      const entries = getCachedDeptFinderEntries(records, mode);
       const selectedEntries = getSelectedDeptEntries(entries);
       const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
       const keyword = safe(searchEl.value);
@@ -4948,8 +5031,9 @@ body.protected-export-locked {
           `).join("")}</div>`
         : '<div class="dept-finder-selection-empty">아직 선택한 학과가 없습니다. 검색 결과에서 학과를 추가해 주세요.</div>';
 
-      openBtn.disabled = selectedEntries.length === 0;
+      if (openBtn) openBtn.disabled = selectedEntries.length === 0;
       clearBtn.disabled = selectedEntries.length === 0;
+      if (options.updateConditionSummary) renderConditionQuerySummary(records);
     }
 
     function bindDeptFinderControls(records) {
@@ -4971,7 +5055,7 @@ body.protected-export-locked {
           const nextMode = trigger.getAttribute("data-dept-finder-mode") || DEFAULT_DEPT_FINDER_GROUPING_MODE;
           if (nextMode === getDeptFinderGroupingMode()) return;
           syncDeptFinderSelectionForMode(records, nextMode);
-          renderDeptFinder(records);
+          renderDeptFinder(records, { updateConditionSummary: true });
         });
       }
       if (resultsEl) {
@@ -4981,13 +5065,13 @@ body.protected-export-locked {
             const searchEl = document.getElementById("dept-finder-search");
             const keyword = safe(searchEl ? searchEl.value : "");
             if (!keyword) return;
-            const entries = makeDeptFinderEntries(records, getDeptFinderGroupingMode());
+            const entries = getCachedDeptFinderEntries(records, getDeptFinderGroupingMode());
             const selectedSet = new Set(filterState.selectedDeptKeys);
             const matches = getDeptFinderMatches(entries, keyword)
               .filter((entry) => !selectedSet.has(entry.key))
               .slice(0, DEPT_SEARCH_RESULT_LIMIT);
             const changed = addDeptFinderSelection(matches.map((entry) => entry.key));
-            if (changed) renderDeptFinder(records);
+            if (changed) renderDeptFinder(records, { updateConditionSummary: true });
             return;
           }
           const trigger = event.target instanceof Element ? event.target.closest("[data-dept-add]") : null;
@@ -4995,7 +5079,7 @@ body.protected-export-locked {
           const key = trigger.getAttribute("data-dept-add") || "";
           if (!key) return;
           const changed = addDeptFinderSelection([key]);
-          if (changed) renderDeptFinder(records);
+          if (changed) renderDeptFinder(records, { updateConditionSummary: true });
         });
       }
       if (selectedEl) {
@@ -5005,18 +5089,18 @@ body.protected-export-locked {
           const key = trigger.getAttribute("data-dept-remove") || "";
           if (!key) return;
           filterState.selectedDeptKeys = filterState.selectedDeptKeys.filter((item) => item !== key);
-          renderDeptFinder(records);
+          renderDeptFinder(records, { updateConditionSummary: true });
         });
       }
       if (clearBtn) {
         clearBtn.addEventListener("click", () => {
           filterState.selectedDeptKeys = [];
-          renderDeptFinder(records);
+          renderDeptFinder(records, { updateConditionSummary: true });
         });
       }
       if (openBtn) {
         openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedDeptEntries(makeDeptFinderEntries(records, getDeptFinderGroupingMode()));
+          const selectedEntries = getSelectedDeptEntries(getCachedDeptFinderEntries(records, getDeptFinderGroupingMode()));
           if (!selectedEntries.length) return;
           showDeptAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
         });
@@ -5139,7 +5223,7 @@ body.protected-export-locked {
       return `${buildSubtypeFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
     }
 
-    function renderSubtypeFinder(records) {
+    function renderSubtypeFinder(records, options = {}) {
       const searchEl = document.getElementById("subtype-finder-search");
       const resultsEl = document.getElementById("subtype-finder-results");
       const selectedEl = document.getElementById("subtype-finder-selected");
@@ -5147,9 +5231,9 @@ body.protected-export-locked {
       const openBtn = document.getElementById("subtype-finder-open-btn");
       const clearBtn = document.getElementById("subtype-finder-clear-btn");
       const hintEl = document.getElementById("subtype-finder-hint");
-      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !openBtn || !clearBtn || !hintEl) return;
+      if (!searchEl || !resultsEl || !selectedEl || !selectionMetaEl || !clearBtn || !hintEl) return;
 
-      const entries = makeSubtypeFinderEntries(records);
+      const entries = getCachedSubtypeFinderEntries(records);
       const selectedEntries = getSelectedSubtypeEntries(entries);
       const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
       const keyword = safe(searchEl.value);
@@ -5210,8 +5294,9 @@ body.protected-export-locked {
           `).join("")}</div>`
         : '<div class="dept-finder-selection-empty">아직 선택한 세부유형이 없습니다. 검색 결과에서 세부유형을 추가해 주세요.</div>';
 
-      openBtn.disabled = selectedEntries.length === 0;
+      if (openBtn) openBtn.disabled = selectedEntries.length === 0;
       clearBtn.disabled = selectedEntries.length === 0;
+      if (options.updateConditionSummary) renderConditionQuerySummary(records);
     }
 
     function bindSubtypeFinderControls(records) {
@@ -5232,13 +5317,13 @@ body.protected-export-locked {
             const searchEl = document.getElementById("subtype-finder-search");
             const keyword = safe(searchEl ? searchEl.value : "");
             if (!keyword) return;
-            const entries = makeSubtypeFinderEntries(records);
+            const entries = getCachedSubtypeFinderEntries(records);
             const selectedSet = new Set(filterState.selectedSubtypeKeys);
             const matches = getSubtypeFinderMatches(entries, keyword)
               .filter((entry) => !selectedSet.has(entry.key))
               .slice(0, DEPT_SEARCH_RESULT_LIMIT);
             const changed = addSubtypeFinderSelection(matches.map((entry) => entry.key));
-            if (changed) renderSubtypeFinder(records);
+            if (changed) renderSubtypeFinder(records, { updateConditionSummary: true });
             return;
           }
           const trigger = event.target instanceof Element ? event.target.closest("[data-subtype-add]") : null;
@@ -5246,7 +5331,7 @@ body.protected-export-locked {
           const key = trigger.getAttribute("data-subtype-add") || "";
           if (!key) return;
           const changed = addSubtypeFinderSelection([key]);
-          if (changed) renderSubtypeFinder(records);
+          if (changed) renderSubtypeFinder(records, { updateConditionSummary: true });
         });
       }
       if (selectedEl) {
@@ -5256,18 +5341,18 @@ body.protected-export-locked {
           const key = trigger.getAttribute("data-subtype-remove") || "";
           if (!key) return;
           filterState.selectedSubtypeKeys = filterState.selectedSubtypeKeys.filter((item) => item !== key);
-          renderSubtypeFinder(records);
+          renderSubtypeFinder(records, { updateConditionSummary: true });
         });
       }
       if (clearBtn) {
         clearBtn.addEventListener("click", () => {
           filterState.selectedSubtypeKeys = [];
-          renderSubtypeFinder(records);
+          renderSubtypeFinder(records, { updateConditionSummary: true });
         });
       }
       if (openBtn) {
         openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedSubtypeEntries(makeSubtypeFinderEntries(records));
+          const selectedEntries = getSelectedSubtypeEntries(getCachedSubtypeFinderEntries(records));
           if (!selectedEntries.length) return;
           showSubtypeAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
         });
@@ -5275,7 +5360,7 @@ body.protected-export-locked {
     }
 
     function normalizeSubtypeAnalyticsEntries(selection, records) {
-      const entries = makeSubtypeFinderEntries(records);
+      const entries = getCachedSubtypeFinderEntries(records);
       if (Array.isArray(selection) && selection.length) {
         const keySet = new Set(selection.map((entry) => {
           if (entry && entry.key) return entry.key;
@@ -5381,6 +5466,269 @@ body.protected-export-locked {
       if (listView) listView.hidden = false;
       if (analyticsView) analyticsView.hidden = true;
       analyticsViewState.subtypeTab = { active: false, entries: [] };
+      cleanupAnalyticsPlots(contentEl);
+      if (contentEl) contentEl.innerHTML = "";
+    }
+
+    function normalizeConditionKeyList(keys = [], type = "") {
+      if (!Array.isArray(keys)) return [];
+      return keys.map((key) => {
+        if (typeof key !== "string") return "";
+        if (type === "univ") return key.startsWith("univ::") ? key : buildUnivFinderKey(key);
+        if (type === "subtype") return key.startsWith("subtype::") ? key : buildSubtypeFinderEntryKey(key);
+        if (type === "dept") {
+          if (key.startsWith("dept::") || key.startsWith("univ::")) return key;
+          return `univ::${key}`;
+        }
+        return key;
+      }).filter(Boolean);
+    }
+
+    function serializeConditionCriteria(criteria = {}) {
+      const univEntries = Array.isArray(criteria.univEntries) ? criteria.univEntries : [];
+      const deptEntries = Array.isArray(criteria.deptEntries) ? criteria.deptEntries : [];
+      const subtypeEntries = Array.isArray(criteria.subtypeEntries) ? criteria.subtypeEntries : [];
+      return {
+        univKeys: univEntries.map((entry) => entry.key).filter(Boolean),
+        deptKeys: deptEntries.map((entry) => entry.key).filter(Boolean),
+        subtypeKeys: subtypeEntries.map((entry) => entry.key).filter(Boolean),
+        deptGroupingMode: criteria.deptGroupingMode === "univ" ? "univ" : DEFAULT_DEPT_FINDER_GROUPING_MODE,
+      };
+    }
+
+    function normalizeConditionCriteria(criteria = {}, records = []) {
+      const source = criteria && typeof criteria === "object" ? criteria : {};
+      const rawUnivKeys = Array.isArray(source.univKeys)
+        ? source.univKeys
+        : (Array.isArray(source.univEntries) ? source.univEntries.map((entry) => entry && entry.key).filter(Boolean) : []);
+      const rawDeptKeys = Array.isArray(source.deptKeys)
+        ? source.deptKeys
+        : (Array.isArray(source.deptEntries) ? source.deptEntries.map((entry) => entry && entry.key).filter(Boolean) : []);
+      const rawSubtypeKeys = Array.isArray(source.subtypeKeys)
+        ? source.subtypeKeys
+        : (Array.isArray(source.subtypeEntries) ? source.subtypeEntries.map((entry) => entry && entry.key).filter(Boolean) : []);
+      const deptKeys = normalizeConditionKeyList(rawDeptKeys, "dept");
+      const inferredDeptMode = deptKeys.some((key) => key.startsWith("univ::")) ? "univ" : getDeptFinderGroupingMode();
+      const deptGroupingMode = source.deptGroupingMode === "univ" || source.deptGroupingMode === "dept"
+        ? source.deptGroupingMode
+        : inferredDeptMode;
+      const univKeySet = new Set(normalizeConditionKeyList(rawUnivKeys, "univ"));
+      const deptKeySet = new Set(deptKeys);
+      const subtypeKeySet = new Set(normalizeConditionKeyList(rawSubtypeKeys, "subtype"));
+
+      return {
+        univEntries: getCachedUnivFinderEntries(records).filter((entry) => univKeySet.has(entry.key)),
+        deptEntries: getCachedDeptFinderEntries(records, deptGroupingMode).filter((entry) => deptKeySet.has(entry.key)),
+        subtypeEntries: getCachedSubtypeFinderEntries(records).filter((entry) => subtypeKeySet.has(entry.key)),
+        deptGroupingMode,
+      };
+    }
+
+    function getSelectedConditionCriteria(records) {
+      const deptGroupingMode = getDeptFinderGroupingMode();
+      return {
+        univEntries: getSelectedUnivEntries(getCachedUnivFinderEntries(records)),
+        deptEntries: getSelectedDeptEntries(getCachedDeptFinderEntries(records, deptGroupingMode)),
+        subtypeEntries: getSelectedSubtypeEntries(getCachedSubtypeFinderEntries(records)),
+        deptGroupingMode,
+      };
+    }
+
+    function hasConditionCriteria(criteria = {}) {
+      return Boolean(
+        (Array.isArray(criteria.univEntries) && criteria.univEntries.length) ||
+        (Array.isArray(criteria.deptEntries) && criteria.deptEntries.length) ||
+        (Array.isArray(criteria.subtypeEntries) && criteria.subtypeEntries.length)
+      );
+    }
+
+    function filterRecordsByConditionCriteria(records = [], criteria = {}) {
+      let filtered = Array.isArray(records) ? records : [];
+      const univEntries = Array.isArray(criteria.univEntries) ? criteria.univEntries : [];
+      const deptEntries = Array.isArray(criteria.deptEntries) ? criteria.deptEntries : [];
+      const subtypeEntries = Array.isArray(criteria.subtypeEntries) ? criteria.subtypeEntries : [];
+
+      if (univEntries.length) {
+        const selectedUnivs = new Set(univEntries.map((entry) => entry.univ || "미상"));
+        filtered = filtered.filter((record) => selectedUnivs.has(record.univ || "미상"));
+      }
+      if (deptEntries.length) {
+        const selectedDeptKeys = new Set(deptEntries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
+        filtered = filtered.filter((record) => selectedDeptKeys.has(buildDeptFinderKey(record.univ, record.dept)));
+      }
+      if (subtypeEntries.length) {
+        const selectedSubtypeKeys = new Set(subtypeEntries.flatMap((entry) => getSubtypeFinderEntryMatchKeys(entry)));
+        filtered = filtered.filter((record) => selectedSubtypeKeys.has(buildSubtypeFinderRecordKey(record.apptype, record.subtype)));
+      }
+      return filtered;
+    }
+
+    function formatConditionCriteriaSummary(criteria = {}) {
+      const parts = [];
+      if (criteria.univEntries && criteria.univEntries.length) {
+        parts.push(`대학 ${formatUnivSelectionSummary(criteria.univEntries)}`);
+      }
+      if (criteria.deptEntries && criteria.deptEntries.length) {
+        parts.push(`학과 ${formatDeptSelectionSummary(criteria.deptEntries)}`);
+      }
+      if (criteria.subtypeEntries && criteria.subtypeEntries.length) {
+        parts.push(`세부유형 ${formatSubtypeSelectionSummary(criteria.subtypeEntries)}`);
+      }
+      return parts.length ? parts.join(" · ") : "선택 조건 없음";
+    }
+
+    function renderConditionQuerySummary(records) {
+      const summaryEl = document.getElementById("condition-query-summary");
+      const openBtn = document.getElementById("condition-finder-open-btn");
+      const clearBtn = document.getElementById("condition-finder-clear-btn");
+      if (!summaryEl || !openBtn || !clearBtn) return;
+
+      const criteria = getSelectedConditionCriteria(records);
+      const hasCriteria = hasConditionCriteria(criteria);
+      const filteredRecords = hasCriteria ? filterRecordsByConditionCriteria(records, criteria) : [];
+      const conditionCounts = [
+        criteria.univEntries.length ? `대학 ${criteria.univEntries.length}개` : "",
+        criteria.deptEntries.length ? `학과 ${criteria.deptEntries.length}개` : "",
+        criteria.subtypeEntries.length ? `세부유형 ${criteria.subtypeEntries.length}개` : "",
+      ].filter(Boolean);
+
+      if (!hasCriteria) {
+        summaryEl.innerHTML = `<div class="condition-summary-empty">대학, 학과, 세부유형 중 하나 이상을 선택해 주세요. 여러 종류를 함께 선택하면 AND 조건으로 좁혀집니다.</div>`;
+      } else {
+        summaryEl.innerHTML = `
+          <div class="condition-summary-main">
+            <div class="condition-summary-title">${escapeHtml(formatConditionCriteriaSummary(criteria))}</div>
+            <div class="condition-summary-meta">${escapeHtml(conditionCounts.join(" · "))} · AND 적용 결과 ${filteredRecords.length.toLocaleString()}건</div>
+          </div>
+        `;
+      }
+
+      openBtn.disabled = !hasCriteria || filteredRecords.length === 0;
+      clearBtn.disabled = !hasCriteria;
+    }
+
+    function bindConditionQueryControls(records) {
+      const openBtn = document.getElementById("condition-finder-open-btn");
+      const clearBtn = document.getElementById("condition-finder-clear-btn");
+      if (openBtn) {
+        openBtn.addEventListener("click", () => {
+          const criteria = getSelectedConditionCriteria(records);
+          showConditionAnalytics(criteria, records, dataState.metaAllRecords || records, dataState.metaYears || []);
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          filterState.selectedUnivKeys = [];
+          filterState.selectedDeptKeys = [];
+          filterState.selectedSubtypeKeys = [];
+          renderUnivDirectory(records);
+          renderDeptFinder(records);
+          renderSubtypeFinder(records);
+          renderConditionQuerySummary(records);
+        });
+      }
+    }
+
+    function showConditionAnalytics(criteriaInput, records, allRecords, metaYears) {
+      const listView = document.getElementById("condition-list-view");
+      const analyticsView = document.getElementById("condition-analytics-view");
+      const titleEl = document.getElementById("condition-analytics-title");
+      const subtitleEl = document.getElementById("condition-analytics-subtitle");
+      const contentEl = document.getElementById("condition-analytics-content");
+      const criteria = normalizeConditionCriteria(criteriaInput || serializeConditionCriteria(getSelectedConditionCriteria(records)), records);
+      if (!listView || !analyticsView || !contentEl || !hasConditionCriteria(criteria)) return;
+
+      const conditionRecords = filterRecordsByConditionCriteria(records, criteria);
+      if (!conditionRecords.length) {
+        renderConditionQuerySummary(records);
+        return;
+      }
+      const conditionAllRecords = filterRecordsByConditionCriteria(allRecords, criteria);
+      const years = metaYears || [];
+
+      listView.hidden = true;
+      analyticsView.hidden = false;
+      analyticsViewState.conditionTab = {
+        active: true,
+        criteria: serializeConditionCriteria(criteria),
+      };
+
+      if (titleEl) titleEl.textContent = formatConditionCriteriaSummary(criteria);
+      const yearScope = formatAcademicYearScope(conditionRecords);
+      if (subtitleEl) {
+        const subtitleParts = ["AND 조건", `총 ${conditionRecords.length.toLocaleString()}건`];
+        if (yearScope) subtitleParts.push(yearScope);
+        subtitleEl.textContent = subtitleParts.join(" · ");
+      }
+
+      cleanupAnalyticsPlots(contentEl);
+      contentEl.innerHTML = "";
+
+      const pid = ANALYTICS_CONDITION_PLOT_BASE;
+      const block = buildPlotBlock(
+        conditionRecords,
+        pid,
+        "조건별 조회",
+        true, false, true, true, false, true, false, false, true
+      );
+      renderState.plotRegistryData[pid] = block.data;
+
+      let html = `<div class="dept-container section-overall">
+        <div class="section-hint"><strong>전형별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
+        ${block.html}
+      </div>`;
+
+      const conditionUnivSet = new Set(conditionRecords.map((record) => record.univ || "미상"));
+      const showConditionTop20 = conditionUnivSet.size >= 2;
+      if (showConditionTop20) {
+        html += buildUnivTopSectionHtml("condition");
+      }
+
+      if (years.length > 1) {
+        html += `<div class="dept-container section-year-comparison">
+          <div class="dept-header">연도별 비교</div>
+          <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
+            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
+          </div></div>
+            <div id="condition-analytics-year-apptype" class="aux-container"></div>
+          </div>
+        </div>`;
+      }
+
+      contentEl.innerHTML = html;
+
+      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(conditionRecords, "all_subj_grade", pid);
+      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(conditionRecords, pid);
+      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(conditionRecords, pid);
+      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(conditionRecords, pid);
+      if (years.length > 1 && document.getElementById("condition-analytics-year-apptype")) {
+        renderYearApptypeTrendTable(conditionAllRecords, years, "condition-analytics-year-apptype");
+      }
+
+      if (showConditionTop20) {
+        renderUnivTop(conditionRecords, "condition");
+        bindUnivTopModeToggle(conditionRecords, "condition");
+        bindUnivTopSortToggle(conditionRecords, "condition");
+      } else {
+        univTopRecordsByScope.delete("condition");
+      }
+
+      bindGradeBandModeTogglesScoped(contentEl, conditionRecords);
+      bindApptypeBandModeTogglesScoped(contentEl, conditionRecords);
+      bindPlotExportButtons(contentEl);
+      bindPlotTableButtons(contentEl);
+
+      analyticsView.scrollIntoView({ behavior: "instant" });
+    }
+
+    function hideConditionAnalytics() {
+      const listView = document.getElementById("condition-list-view");
+      const analyticsView = document.getElementById("condition-analytics-view");
+      const contentEl = document.getElementById("condition-analytics-content");
+      if (listView) listView.hidden = false;
+      if (analyticsView) analyticsView.hidden = true;
+      analyticsViewState.conditionTab = { active: false, criteria: null };
+      univTopRecordsByScope.delete("condition");
       cleanupAnalyticsPlots(contentEl);
       if (contentEl) contentEl.innerHTML = "";
     }
