@@ -2690,17 +2690,22 @@ body.protected-export-locked {
 
     function downloadYearTableXlsx(exportId) {
       const config = yearTableExportRegistry[exportId];
-      if (!config || !Array.isArray(config.rows) || !config.rows.length) return;
-      const worksheet = XLSX.utils.json_to_sheet(config.rows);
+      const rows = config && typeof config.getRows === "function" ? config.getRows(config) : (config && config.rows);
+      if (!config || !Array.isArray(rows) || !rows.length) return;
+      const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, config.sheetName || "데이터");
       const filename = `${sanitizeFilenamePart(config.filenameBase || "데이터")}_${buildExportTimestamp()}.xlsx`;
       XLSX.writeFile(workbook, filename);
     }
 
-    function buildYearTableActionsHtml(exportId) {
+    function buildYearTableActionsHtml(exportId, options = {}) {
+      const uniquePassButton = options.includeUniquePassToggle
+        ? `<button type="button" class="year-table-unique-pass-btn" data-year-unique-pass-toggle="${escapeHtml(exportId)}" aria-pressed="false" title="같은 학생의 여러 합격을 1명으로 계산한 단수합격건수를 표에 표시합니다.">단수합격건수 조회</button>`
+        : "";
       return `<div class="year-table-actions">
         <button type="button" class="year-table-export-btn" data-year-table-export="${escapeHtml(exportId)}" title="현재 표를 엑셀 파일로 저장합니다.">엑셀 저장</button>
+        ${uniquePassButton}
       </div>`;
     }
 
@@ -2793,63 +2798,91 @@ body.protected-export-locked {
       const apptypeMap = new Map();
       const yearTotals = {};
       const yearPassTotals = {};
+      const yearUniquePassStudentSets = {};
       allRecords.forEach((record) => {
         const apptype = record.apptype || "미상";
         if (!apptypeMap.has(apptype)) apptypeMap.set(apptype, { total: 0, byYear: {} });
         const entry = apptypeMap.get(apptype);
         entry.total += 1;
         yearTotals[record.academic_year] = (yearTotals[record.academic_year] || 0) + 1;
-        if (record.result === "합격" || record.result === "충원합격") {
+        if (isPassResult(record.result)) {
           yearPassTotals[record.academic_year] = (yearPassTotals[record.academic_year] || 0) + 1;
+          const studentKey = getStudentRecordKey(record);
+          if (studentKey) {
+            if (!yearUniquePassStudentSets[record.academic_year]) yearUniquePassStudentSets[record.academic_year] = new Set();
+            yearUniquePassStudentSets[record.academic_year].add(studentKey);
+          }
         }
         if (!entry.byYear[record.academic_year]) {
-          entry.byYear[record.academic_year] = { total: 0, pass: 0 };
+          entry.byYear[record.academic_year] = { total: 0, pass: 0, uniquePassStudentKeys: new Set() };
         }
         const yearEntry = entry.byYear[record.academic_year];
         yearEntry.total += 1;
-        if (record.result === "합격" || record.result === "충원합격") {
+        if (isPassResult(record.result)) {
           yearEntry.pass += 1;
+          const studentKey = getStudentRecordKey(record);
+          if (studentKey) yearEntry.uniquePassStudentKeys.add(studentKey);
         }
       });
       const exportRows = [];
+      const uniquePassExportRows = [];
       const rows = Array.from(apptypeMap.entries())
         .sort((a, b) => (b[1].total - a[1].total) || a[0].localeCompare(b[0], "ko"))
         .map(([apptype, data]) => {
           const exportRow = { "전형": apptype };
+          const uniquePassExportRow = { "전형": apptype };
           const yearCells = years.map((year) => {
-            const yearEntry = data.byYear[year] || { total: 0, pass: 0 };
+            const yearEntry = data.byYear[year] || { total: 0, pass: 0, uniquePassStudentKeys: new Set() };
+            const uniquePassCount = yearEntry.uniquePassStudentKeys.size;
             const rate = yearEntry.total ? ((yearEntry.pass / yearEntry.total) * 100).toFixed(1) + "%" : "-";
             const share = yearTotals[year] ? ((yearEntry.total / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
             exportRow[`${year} 지원건수`] = yearEntry.total;
             exportRow[`${year} 지원비율`] = share;
             exportRow[`${year} 합격건수`] = yearEntry.pass;
             exportRow[`${year} 합격률`] = rate;
+            uniquePassExportRow[`${year} 지원건수`] = yearEntry.total;
+            uniquePassExportRow[`${year} 지원비율`] = share;
+            uniquePassExportRow[`${year} 합격건수`] = yearEntry.pass;
+            uniquePassExportRow[`${year} 단수합격건수`] = uniquePassCount;
+            uniquePassExportRow[`${year} 합격률`] = rate;
             return `<td data-apptype-click="${escapeHtml(apptype)}" data-year="${year}" style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
               <div class="year-trend-cell">
                 <div class="year-trend-count">지원 ${yearEntry.total.toLocaleString()}건</div>
                 <div class="year-trend-share">지원 비율 ${escapeHtml(share)}</div>
                 <div class="year-trend-pass">합격 ${yearEntry.pass.toLocaleString()}건</div>
+                <div class="year-trend-unique-pass">단수합격 ${uniquePassCount.toLocaleString()}명</div>
                 <div class="year-trend-rate">합격률 ${escapeHtml(rate)}</div>
               </div>
             </td>`;
           }).join("");
           exportRows.push(exportRow);
+          uniquePassExportRows.push(uniquePassExportRow);
           return `<tr>
             <td data-apptype-click="${escapeHtml(apptype)}" style="width:${APPTYPE_COL_WIDTH}px;min-width:${APPTYPE_COL_WIDTH}px;max-width:${APPTYPE_COL_WIDTH}px;"><span class="detail-cell-ellipsis year-trend-label" title="${escapeHtml(apptype)}">${escapeHtml(apptype)}</span></td>
             ${yearCells}
           </tr>`;
         }).join("");
       const totalRow = { "전형": "총 합격건수(충원포함)" };
+      const uniquePassTotalRow = { "전형": "총 합격건수(충원포함)" };
       years.forEach((year) => {
         totalRow[`${year} 지원건수`] = yearTotals[year] || 0;
         totalRow[`${year} 지원비율`] = "";
         totalRow[`${year} 합격건수`] = yearPassTotals[year] || 0;
         totalRow[`${year} 합격률`] = yearTotals[year] ? (((yearPassTotals[year] || 0) / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
+        uniquePassTotalRow[`${year} 지원건수`] = yearTotals[year] || 0;
+        uniquePassTotalRow[`${year} 지원비율`] = "";
+        uniquePassTotalRow[`${year} 합격건수`] = yearPassTotals[year] || 0;
+        uniquePassTotalRow[`${year} 단수합격건수`] = yearUniquePassStudentSets[year] ? yearUniquePassStudentSets[year].size : 0;
+        uniquePassTotalRow[`${year} 합격률`] = yearTotals[year] ? (((yearPassTotals[year] || 0) / yearTotals[year]) * 100).toFixed(1) + "%" : "-";
       });
       exportRows.push(totalRow);
+      uniquePassExportRows.push(uniquePassTotalRow);
       const exportId = `year-apptype-${containerId}`;
       yearTableExportRegistry[exportId] = {
         rows: exportRows,
+        uniquePassRows: uniquePassExportRows,
+        showUniquePass: false,
+        getRows: (config) => config.showUniquePass ? config.uniquePassRows : config.rows,
         sheetName: "연도별전형별현황",
         filenameBase: "연도별_전형별_현황",
       };
@@ -2861,13 +2894,15 @@ body.protected-export-locked {
       const yearHeaders = years.map((year) => `<th style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">${year}</th>`).join("");
       const totalCells = years.map((year) => {
         const totalPass = yearPassTotals[year] || 0;
+        const totalUniquePass = yearUniquePassStudentSets[year] ? yearUniquePassStudentSets[year].size : 0;
         return `<td style="width:${YEAR_COL_WIDTH}px;min-width:${YEAR_COL_WIDTH}px;max-width:${YEAR_COL_WIDTH}px;text-align:center;">
           <div class="year-trend-total-cell">
             <div class="year-trend-pass">합격 ${totalPass.toLocaleString()}건</div>
+            <div class="year-trend-unique-pass">단수합격 ${totalUniquePass.toLocaleString()}명</div>
           </div>
         </td>`;
       }).join("");
-      el.innerHTML = `${buildYearTableActionsHtml(exportId)}<div class="summary-table-wrap" style="overflow-x:auto;">
+      el.innerHTML = `${buildYearTableActionsHtml(exportId, { includeUniquePassToggle: true })}<div class="summary-table-wrap" style="overflow-x:auto;">
         <table class="summary-table year-trend-table">
           <colgroup>${colgroup}</colgroup>
           <thead>
@@ -2888,6 +2923,26 @@ body.protected-export-locked {
         </table>
       </div>`;
       el.onclick = (event) => {
+        const uniquePassToggle = event.target instanceof Element ? event.target.closest("[data-year-unique-pass-toggle]") : null;
+        if (uniquePassToggle) {
+          event.stopPropagation();
+          const targetExportId = uniquePassToggle.getAttribute("data-year-unique-pass-toggle") || "";
+          const table = el.querySelector(".year-trend-table");
+          const nextVisible = table ? !table.classList.contains("show-unique-pass") : false;
+          if (table) table.classList.toggle("show-unique-pass", nextVisible);
+          uniquePassToggle.setAttribute("aria-pressed", String(nextVisible));
+          uniquePassToggle.textContent = nextVisible ? "단수합격건수 숨기기" : "단수합격건수 조회";
+          uniquePassToggle.setAttribute(
+            "title",
+            nextVisible
+              ? "표에서 단수합격건수를 숨깁니다."
+              : "같은 학생의 여러 합격을 1명으로 계산한 단수합격건수를 표에 표시합니다."
+          );
+          if (yearTableExportRegistry[targetExportId]) {
+            yearTableExportRegistry[targetExportId].showUniquePass = nextVisible;
+          }
+          return;
+        }
         const exportBtn = event.target instanceof Element ? event.target.closest("[data-year-table-export]") : null;
         if (exportBtn) {
           event.stopPropagation();
