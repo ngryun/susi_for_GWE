@@ -392,6 +392,8 @@
       }
     });
     window.addEventListener("resize", updateStickyTabOffset);
+    // 창 크기가 바뀌면 모달 툴바가 줄바꿈되어 높이가 달라질 수 있으므로 헤더 오프셋도 다시 측정한다.
+    window.addEventListener("resize", updateDetailToolbarOffset);
 
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
@@ -2270,6 +2272,21 @@ body.protected-export-locked {
       const fixedHeader = reportEl.querySelector(".fixed-header");
       const nextOffset = fixedHeader ? Math.ceil(fixedHeader.getBoundingClientRect().height) : 84;
       document.documentElement.style.setProperty("--report-tabs-top", `${nextOffset}px`);
+    }
+
+    // 상세 모달의 sticky 헤더가 sticky 툴바(필터·페이지네이션) 바로 아래에 붙도록
+    // 툴바 높이를 측정해 CSS 변수(--detail-toolbar-h)로 노출한다. 툴바는 필터 줄바꿈에
+    // 따라 높이가 달라지므로 매 렌더 후 다시 측정한다.
+    function updateDetailToolbarOffset() {
+      if (!detailModalBodyEl) return;
+      const toolbar = detailModalBodyEl.querySelector(".detail-toolbar");
+      if (!toolbar) {
+        detailModalBodyEl.style.removeProperty("--detail-toolbar-h");
+        return;
+      }
+      const height = Math.ceil(toolbar.getBoundingClientRect().height);
+      // 1px 겹치게 해 서브픽셀 경계에서 줄이 비치는 것을 막는다.
+      detailModalBodyEl.style.setProperty("--detail-toolbar-h", `${Math.max(0, height - 1)}px`);
     }
 
     function resetLazyObservers() {
@@ -6459,6 +6476,7 @@ body.protected-export-locked {
         detailModalEl.hidden = false;
         document.body.style.overflow = "hidden";
         detailModalBodyEl.scrollTop = 0;
+        updateDetailToolbarOffset();
         return;
       }
       const detailRows = getDetailRowsForView(currentView);
@@ -6492,6 +6510,7 @@ body.protected-export-locked {
       detailModalEl.hidden = false;
       document.body.style.overflow = "hidden";
       detailModalBodyEl.scrollTop = 0;
+      updateDetailToolbarOffset();
     }
 
     function openUnivDetailModal(univ, records) {
