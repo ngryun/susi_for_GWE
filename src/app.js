@@ -6418,14 +6418,13 @@ body.protected-export-locked {
     function buildExportRows(records, options = {}) {
       const { includeUniv = false } = options;
       const fmtGrade = (v) => v === null || v === undefined || Number.isNaN(v) ? "" : Number(v).toFixed(2);
+      // 내보내기 컬럼은 상세 표(및 셀 툴팁)에 실제로 보이는 항목으로만 한정한다.
+      // 화면에 표시하지 않는 소재지·농어촌(개인 민감정보)과 지역(대학)·전형유형은
+      // 보이는 정보보다 더 많은 정보가 새어 나가지 않도록 내보내기에서 제외한다.
+      // (컬럼 순서는 getDetailTableColumns의 화면 순서를 따른다.)
       return records.map((r) => {
-        const row = {
-          "학년도": r.academic_year || "",
-          "소재지": r.school_location || "",
-          "지역(대학)": r.region || "",
-        };
+        const row = { "학년도": r.academic_year || "" };
         if (includeUniv) row["대학"] = r.univ || "";
-        row["전형유형"] = r.apptype || "";
         row["세부유형"] = r.subtype || "";
         row["모집단위"] = r.dept || "";
         row["모집인원"] = r.enrollment_count != null ? r.enrollment_count : "";
@@ -6433,13 +6432,14 @@ body.protected-export-locked {
         row["결과"] = r.result || "";
         row["등록"] = formatRegistrationDisplay(r.registered_yn);
         row["전교과등급"] = fmtGrade(r.all_subj_grade);
-        row["환산등급(일반)"] = fmtGrade(r.conv_grade);
-        row["환산등급(일반+진로)"] = fmtGrade(r.conv_grade_ext);
-        row["농어촌"] = r.is_rural || "";
+        // 전교과등급 셀 툴팁으로 보이는 5등급 환산 추정치
         ESTIMATED_FIVE_GRADE_STANDARDS.forEach((standard) => {
           const estimated = formatEstimatedFiveGrade(r.all_subj_grade, standard.key);
           row[`5등급(${standard.label})`] = estimated === "-" ? "" : estimated;
         });
+        row["환산등급(일반)"] = fmtGrade(r.conv_grade);
+        // 환산(일반) 셀 툴팁으로 보이는 값
+        row["환산등급(일반+진로)"] = fmtGrade(r.conv_grade_ext);
         return row;
       });
     }
