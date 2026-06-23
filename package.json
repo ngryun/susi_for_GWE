@@ -1,0 +1,19 @@
+{
+  "name": "susi-for-gwe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "수시 입시 결과 분석 프로그램 — 단일 HTML 페이지. 개발은 src/에서 진행하고 index.html로 합칩니다.",
+  "scripts": {
+    "build": "node tools/single-file.js build",
+    "extract": "node tools/single-file.js extract",
+    "check": "node tools/single-file.js check",
+    "sample-data": "node tools/make_sample_data.js"
+  },
+  "devDependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

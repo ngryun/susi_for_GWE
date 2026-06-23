@@ -224,6 +224,7 @@
       },
       modal: {
         viewStack: [],
+        sourceRecords: [],
       },
       trend: {
         rows: [],
@@ -391,6 +392,8 @@
       }
     });
     window.addEventListener("resize", updateStickyTabOffset);
+    // 창 크기가 바뀌면 모달 툴바가 줄바꿈되어 높이가 달라질 수 있으므로 헤더 오프셋도 다시 측정한다.
+    window.addEventListener("resize", updateDetailToolbarOffset);
 
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
@@ -1955,37 +1958,64 @@ body.protected-export-locked {
       });
       return keySet;
     }
-    function selectStudentMapEntries(sourceMap, keySet) {
+    function selectStudentMapEntries(sourceMap, keySet, anonMap = null) {
       const nextMap = new Map();
       if (!(sourceMap instanceof Map) || !(keySet instanceof Set) || !keySet.size) return nextMap;
+      // anonMap이 주어지면 출력 맵의 키를 익명 코드로 바꿔, records.student_key와
+      // 보조맵(수능/과목등급)의 키가 동일한 익명 키로 일치하도록 한다.
+      const outKey = (realKey) => (anonMap && anonMap.has(realKey) ? anonMap.get(realKey) : realKey);
       keySet.forEach((key) => {
         if (sourceMap.has(key)) {
-          nextMap.set(key, sourceMap.get(key));
+          nextMap.set(outKey(key), sourceMap.get(key));
           return;
         }
         const legacyKey = getUnscopedStudentKey(key);
         if (legacyKey && legacyKey !== key && sourceMap.has(legacyKey)) {
-          nextMap.set(key, sourceMap.get(legacyKey));
+          nextMap.set(outKey(key), sourceMap.get(legacyKey));
         }
       });
       return nextMap;
     }
-    function serializeStudentCsatMapForRecords(records = []) {
-      const keySet = collectStudentKeysFromRecords(records);
-      return packStudentCsatMapForShared(serializeStudentCsatMap(selectStudentMapEntries(dataState.studentCsatByKey, keySet)));
+    // 공유 내보내기용 익명 키 매핑: 실제 student_key(학생고유코드 또는 학년-반-번호 기반)를
+    // 순번 코드(A00001 …)로 변환한다. normalizeLoadedRecord가 academic_year로 키를 재스코프하므로
+    // 익명 키도 같은 규칙으로 스코프해 두어, 패킹 후 records와 보조맵의 키가 어긋나지 않게 한다.
+    function buildSharedKeyAnonymizer(records = []) {
+      const map = new Map();
+      let seq = 0;
+      records.forEach((record) => {
+        const realKey = getStudentRecordKey(record);
+        if (!realKey || map.has(realKey)) return;
+        seq += 1;
+        const code = `A${String(seq).padStart(5, "0")}`;
+        map.set(realKey, scopeStudentKeyByAcademicYear(code, record.academic_year));
+      });
+      return map;
     }
-    function serializeSubjectGradeMapForRecords(records = []) {
+    function anonymizeRecordsForShared(records = [], anonMap = null) {
+      if (!anonMap || !anonMap.size) return records;
+      return records.map((record) => {
+        const realKey = getStudentRecordKey(record);
+        const anonKey = anonMap.get(realKey);
+        return anonKey ? { ...record, student_key: anonKey } : record;
+      });
+    }
+    function serializeStudentCsatMapForRecords(records = [], anonMap = null) {
       const keySet = collectStudentKeysFromRecords(records);
-      return packSubjectGradeMapForShared(serializeSubjectGradeMap(selectStudentMapEntries(dataState.studentSubjectGradeByKey, keySet)));
+      return packStudentCsatMapForShared(serializeStudentCsatMap(selectStudentMapEntries(dataState.studentCsatByKey, keySet, anonMap)));
+    }
+    function serializeSubjectGradeMapForRecords(records = [], anonMap = null) {
+      const keySet = collectStudentKeysFromRecords(records);
+      return packSubjectGradeMapForShared(serializeSubjectGradeMap(selectStudentMapEntries(dataState.studentSubjectGradeByKey, keySet, anonMap)));
     }
     function buildFullSharedExportContext() {
       const uiState = JSON.parse(JSON.stringify(getCurrentReportUiState()));
       const records = Array.isArray(dataState.reportRecords) ? dataState.reportRecords : [];
+      const anonMap = buildSharedKeyAnonymizer(records);
       return {
-        records,
+        records: anonymizeRecordsForShared(records, anonMap),
         uiState,
-        studentCsatData: serializeStudentCsatMapForRecords(records),
-        subjectGradeData: serializeSubjectGradeMapForRecords(records),
+        studentCsatData: serializeStudentCsatMapForRecords(records, anonMap),
+        subjectGradeData: serializeSubjectGradeMapForRecords(records, anonMap),
         filenameBase: "수시입시결과_공유용",
       };
     }
@@ -2051,11 +2081,12 @@ body.protected-export-locked {
         }
       }
 
+      const anonMap = buildSharedKeyAnonymizer(records);
       return {
-        records,
+        records: anonymizeRecordsForShared(records, anonMap),
         uiState,
-        studentCsatData: serializeStudentCsatMapForRecords(records),
-        subjectGradeData: serializeSubjectGradeMapForRecords(records),
+        studentCsatData: serializeStudentCsatMapForRecords(records, anonMap),
+        subjectGradeData: serializeSubjectGradeMapForRecords(records, anonMap),
         filenameBase: `수시입시결과_${buildReportTabLabel(activeTab)}_현재페이지`,
       };
     }
@@ -2251,25 +2282,25 @@ body.protected-export-locked {
       return Array.from(setObj).filter(Boolean).sort();
     }
 
-    function sortedMapKeys(mapObj) {
-      if (!mapObj) return [];
-      return Array.from(mapObj.keys()).filter(Boolean).sort();
-    }
-
-    function getOrCreateArray(mapObj, key) {
-      if (!mapObj.has(key)) mapObj.set(key, []);
-      return mapObj.get(key);
-    }
-
-    function getOrCreateMap(mapObj, key) {
-      if (!mapObj.has(key)) mapObj.set(key, new Map());
-      return mapObj.get(key);
-    }
-
     function updateStickyTabOffset() {
       const fixedHeader = reportEl.querySelector(".fixed-header");
       const nextOffset = fixedHeader ? Math.ceil(fixedHeader.getBoundingClientRect().height) : 84;
       document.documentElement.style.setProperty("--report-tabs-top", `${nextOffset}px`);
+    }
+
+    // 상세 모달의 sticky 헤더가 sticky 툴바(필터·페이지네이션) 바로 아래에 붙도록
+    // 툴바 높이를 측정해 CSS 변수(--detail-toolbar-h)로 노출한다. 툴바는 필터 줄바꿈에
+    // 따라 높이가 달라지므로 매 렌더 후 다시 측정한다.
+    function updateDetailToolbarOffset() {
+      if (!detailModalBodyEl) return;
+      const toolbar = detailModalBodyEl.querySelector(".detail-toolbar");
+      if (!toolbar) {
+        detailModalBodyEl.style.removeProperty("--detail-toolbar-h");
+        return;
+      }
+      const height = Math.ceil(toolbar.getBoundingClientRect().height);
+      // 1px 겹치게 해 서브픽셀 경계에서 줄이 비치는 것을 막는다.
+      detailModalBodyEl.style.setProperty("--detail-toolbar-h", `${Math.max(0, height - 1)}px`);
     }
 
     function resetLazyObservers() {
@@ -2332,30 +2363,12 @@ body.protected-export-locked {
       const subtypeSet = new Set();
       const yearSet = new Set();
 
-      const byUnivApptype = new Map();
-      const byUnivSubtype = new Map();
-      const byUnivDept = new Map();
-      const byUnivDeptSubtype = new Map();
-
       records.forEach((rec) => {
         univSet.add(rec.univ);
         deptSet.add(rec.dept);
         apptypeSet.add(rec.apptype);
         subtypeSet.add(rec.subtype);
         if (rec.academic_year) yearSet.add(rec.academic_year);
-
-        const apMap = getOrCreateMap(byUnivApptype, rec.univ);
-        getOrCreateArray(apMap, rec.apptype).push(rec);
-
-        const stMap = getOrCreateMap(byUnivSubtype, rec.univ);
-        getOrCreateArray(stMap, rec.subtype).push(rec);
-
-        const deptMap = getOrCreateMap(byUnivDept, rec.univ);
-        getOrCreateArray(deptMap, rec.dept).push(rec);
-
-        const deptSubtypeMapByUniv = getOrCreateMap(byUnivDeptSubtype, rec.univ);
-        const deptSubtypeMap = getOrCreateMap(deptSubtypeMapByUniv, rec.dept);
-        getOrCreateArray(deptSubtypeMap, rec.subtype).push(rec);
       });
 
       return {
@@ -2364,10 +2377,6 @@ body.protected-export-locked {
         apptypes: sortedSet(apptypeSet),
         subtypes: sortedSet(subtypeSet),
         years: Array.from(yearSet).sort((a, b) => a - b),
-        byUnivApptype,
-        byUnivSubtype,
-        byUnivDept,
-        byUnivDeptSubtype,
       };
     }
 
@@ -2676,73 +2685,6 @@ body.protected-export-locked {
 	        </div>
 	      </div>`;
 	    }
-
-    function renderYearOverviewChart(allRecords, years, containerId) {
-      const el = document.getElementById(containerId);
-      if (!el) return;
-      const yearLabels = years.map(String);
-      const counts = new Map();
-      years.forEach((y) => counts.set(y, { pass: 0, wait: 0, fail: 0 }));
-      allRecords.forEach((r) => {
-        const bucket = counts.get(r.academic_year);
-        if (!bucket) return;
-        if (r.result === "합격") bucket.pass += 1;
-        else if (r.result === "충원합격") bucket.wait += 1;
-        else if (r.result === "불합격") bucket.fail += 1;
-      });
-      const passArr = [], waitArr = [], failArr = [], rateArr = [];
-      years.forEach((y) => {
-        const b = counts.get(y) || { pass: 0, wait: 0, fail: 0 };
-        const pass = b.pass, wait = b.wait, fail = b.fail;
-        const total = pass + wait + fail;
-        passArr.push(pass); waitArr.push(wait); failArr.push(fail);
-        rateArr.push(total ? ((pass + wait) / total * 100) : 0);
-      });
-      const traces = [
-        { x: yearLabels, y: passArr, name: "합격", type: "bar", marker: { color: "#059669" } },
-        { x: yearLabels, y: waitArr, name: "충원합격", type: "bar", marker: { color: "#d97706" } },
-        { x: yearLabels, y: failArr, name: "불합격", type: "bar", marker: { color: "#dc2626" } },
-        { x: yearLabels, y: rateArr, name: "합격률(%)", type: "scatter", mode: "lines+markers+text",
-          text: rateArr.map(v => v.toFixed(1) + "%"), textposition: "top center",
-          yaxis: "y2", line: { color: "#2563eb", width: 2.5 }, marker: { size: 7, color: "#2563eb" } },
-      ];
-      const layout = {
-        barmode: "stack", font: { family: "Inter, sans-serif", size: 12 },
-        xaxis: { title: "학년도", type: "category" },
-        yaxis: { title: "건수", side: "left" },
-        yaxis2: { title: "합격률(%)", overlaying: "y", side: "right", range: [0, 100], showgrid: false },
-        legend: { orientation: "h", y: -0.2 }, margin: { l: 50, r: 50, t: 20, b: 60 },
-      };
-      Plotly.newPlot(el, traces, layout, { displayModeBar: false, responsive: true });
-    }
-
-    function renderYearGradeBoxPlot(allRecords, years, containerId) {
-      const el = document.getElementById(containerId);
-      if (!el) return;
-      const traces = [];
-      const colors = { "합격": "#059669", "충원합격": "#d97706", "불합격": "#dc2626" };
-      const yearSet = new Set(years);
-      const buckets = { "합격": { x: [], y: [] }, "충원합격": { x: [], y: [] }, "불합격": { x: [], y: [] } };
-      allRecords.forEach((r) => {
-        if (!yearSet.has(r.academic_year)) return;
-        if (r.all_subj_grade === null) return;
-        const bucket = buckets[r.result];
-        if (!bucket) return;
-        bucket.x.push(String(r.academic_year));
-        bucket.y.push(r.all_subj_grade);
-      });
-      ["합격", "충원합격", "불합격"].forEach((result) => {
-        const { x, y } = buckets[result];
-        traces.push({ x, y, type: "box", name: result, marker: { color: colors[result] }, boxpoints: false });
-      });
-      const layout = {
-        boxmode: "group", font: { family: "Inter, sans-serif", size: 12 },
-        xaxis: { title: "학년도", type: "category" },
-        yaxis: { title: "전교과등급", autorange: "reversed" },
-        legend: { orientation: "h", y: -0.2 }, margin: { l: 50, r: 30, t: 20, b: 60 },
-      };
-      Plotly.newPlot(el, traces, layout, { displayModeBar: false, responsive: true });
-    }
 
     function downloadYearTableXlsx(exportId) {
       const config = yearTableExportRegistry[exportId];
@@ -3082,70 +3024,6 @@ body.protected-export-locked {
       requestAnimationFrame(() => {
         updateVisiblePlots();
       });
-    }
-
-    function buildUniversityDetailSection(univ, index, startPlotId) {
-      let plotCounter = startPlotId;
-      let html = `<div class="dept-container"><div class="dept-header">${escapeHtml(univ)}</div>`;
-
-      const apptypeMap = index.byUnivApptype.get(univ) || new Map();
-      const apptypesAll = sortedMapKeys(apptypeMap);
-      if (apptypesAll.length) {
-        html += `<div class="subtype-container"><div class="subtype-header">전형유형별 요약</div>`;
-        apptypesAll.forEach((ap) => {
-          const subset = apptypeMap.get(ap) || [];
-          const block = buildPlotBlock(subset, plotCounter, `${ap}`, true);
-          html += `<div class="subtype-container level-1">
-              <div class="subtype-header is-medium">${escapeHtml(ap)}</div>
-              ${block.html}
-            </div>`;
-          renderState.plotRegistryData[plotCounter] = block.data;
-          plotCounter++;
-        });
-        html += `</div>`;
-      }
-
-      const subtypeMap = index.byUnivSubtype.get(univ) || new Map();
-      const subtypesAll = sortedMapKeys(subtypeMap);
-      if (subtypesAll.length) {
-        html += `<div class="subtype-container"><div class="subtype-header">세부유형별 요약</div>`;
-        subtypesAll.forEach((st) => {
-          const subset = subtypeMap.get(st) || [];
-          const block = buildPlotBlock(subset, plotCounter, `${st}`, true);
-          html += `<div class="subtype-container level-1">
-              <div class="subtype-header is-medium">${escapeHtml(st)}</div>
-              ${block.html}
-            </div>`;
-          renderState.plotRegistryData[plotCounter] = block.data;
-          plotCounter++;
-        });
-        html += `</div>`;
-      }
-
-      const deptMap = index.byUnivDept.get(univ) || new Map();
-      const deptSubtypeByUniv = index.byUnivDeptSubtype.get(univ) || new Map();
-      const univDepts = sortedMapKeys(deptMap);
-      univDepts.forEach((dept, dIdx) => {
-        const deptSubtypeMap = deptSubtypeByUniv.get(dept) || new Map();
-        html += `<div class="subtype-container">
-            <div class="subtype-header is-dept">${dIdx + 1}) ${escapeHtml(dept)}</div>`;
-        const deptSubtypes = sortedMapKeys(deptSubtypeMap);
-        deptSubtypes.forEach((st, sIdx) => {
-          const subset = deptSubtypeMap.get(st) || [];
-          if (!subset.length) return;
-          const block = buildPlotBlock(subset, plotCounter, `${st}`, true);
-          html += `<div class="subtype-container level-2">
-              <div class="subtype-header is-small">${sIdx + 1}) ${escapeHtml(st)}</div>
-              ${block.html}
-            </div>`;
-          renderState.plotRegistryData[plotCounter] = block.data;
-          plotCounter++;
-        });
-        html += `</div>`;
-      });
-
-      html += `</div>`;
-      return { html, nextPlotId: plotCounter };
     }
 
     function buildPlotBlock(dataArr, plotId, title, showStats = true, includeHist = false, includeBands = false, includeApptype = false, includeScatter = true, prioritizeApptype = false, showAllDetail = true, includeRegion = false, includeApptypeBandCompare = false) {
@@ -3927,19 +3805,7 @@ body.protected-export-locked {
       Object.keys(renderState.initializedPlots).forEach((pid) => {
         if (Number(pid) >= ANALYTICS_UNIV_PLOT_BASE) delete renderState.initializedPlots[pid];
       });
-      // observer 해제
-      if (renderState.analyticsPlotObserver) {
-        renderState.analyticsPlotObserver.disconnect();
-        renderState.analyticsPlotObserver = null;
-      }
-      if (renderState.analyticsAuxObserver) {
-        renderState.analyticsAuxObserver.disconnect();
-        renderState.analyticsAuxObserver = null;
-      }
     }
-
-    /* registerAnalyticsAuxRenderers / initAnalyticsLazyRendering 제거됨
-       — showUnivAnalytics, showDeptAnalytics에서 직접 동기 렌더로 대체 */
 
     function bindGradeBandModeTogglesScoped(rootEl, records) {
       if (!rootEl) return;
@@ -4571,13 +4437,6 @@ body.protected-export-locked {
           renderUnivDirectory(records, { updateConditionSummary: true });
         });
       }
-      if (openBtn) {
-        openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedUnivEntries(getCachedUnivFinderEntries(records));
-          if (!selectedEntries.length) return;
-          showUnivAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
-        });
-      }
     }
 
     function normalizeUnivAnalyticsEntries(selection, records) {
@@ -4594,203 +4453,6 @@ body.protected-export-locked {
         return entries.filter((entry) => entry.univ === selection);
       }
       return [];
-    }
-
-    function showUnivAnalytics(selection, records, allRecords, metaYears) {
-      const listView = document.getElementById("univ-list-view");
-      const analyticsView = document.getElementById("univ-analytics-view");
-      const titleEl = document.getElementById("univ-analytics-title");
-      const subtitleEl = document.getElementById("univ-analytics-subtitle");
-      const contentEl = document.getElementById("univ-analytics-content");
-      const entries = normalizeUnivAnalyticsEntries(selection, records);
-      if (!listView || !analyticsView || !contentEl || !entries.length) return;
-
-      listView.hidden = true;
-      analyticsView.hidden = false;
-      analyticsViewState.univTab = {
-        active: true,
-        univ: entries[0].univ,
-        entries: entries.map((entry) => ({ key: entry.key, univ: entry.univ })),
-      };
-      if (titleEl) {
-        titleEl.textContent = entries.length === 1
-          ? entries[0].univ
-          : `${entries[0].univ} 외 ${entries.length - 1}개 대학`;
-      }
-
-      const selectedUnivs = new Set(entries.map((entry) => entry.univ));
-      const univRecords = records.filter((r) => selectedUnivs.has(r.univ || "미상"));
-      const univAllRecords = allRecords.filter((r) => selectedUnivs.has(r.univ || "미상"));
-      const years = metaYears || [];
-      const yearScope = formatAcademicYearScope(univRecords);
-      if (subtitleEl) {
-        const subtitleParts = [];
-        subtitleParts.push(`총 ${univRecords.length}건`);
-        if (yearScope) subtitleParts.push(yearScope);
-        subtitleEl.textContent = subtitleParts.join(" · ");
-      }
-
-      // cleanup previous
-      cleanupAnalyticsPlots(contentEl);
-      contentEl.innerHTML = "";
-
-      let plotCounter = ANALYTICS_UNIV_PLOT_BASE;
-      const block = buildPlotBlock(
-        univRecords, plotCounter, entries.length === 1 ? entries[0].univ : "선택 대학",
-        true,  false, true, true, false, true, false, false, true
-      );
-      renderState.plotRegistryData[plotCounter] = block.data;
-      plotCounter++;
-
-      let html = `<div class="dept-container section-overall">
-        <div class="section-hint"><strong>전형별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
-        ${block.html}
-      </div>`;
-
-      if (years.length > 1) {
-        html += `<div class="dept-container section-year-comparison">
-          <div class="dept-header">연도별 비교</div>
-          <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
-          </div></div>
-            <div id="univ-analytics-year-apptype" class="aux-container"></div>
-          </div>
-        </div>`;
-      }
-
-      contentEl.innerHTML = html;
-
-      // 분석 뷰: 모든 aux 컨테이너를 직접 동기 렌더 (requestAnimationFrame 타이밍 이슈 방지)
-      const pid = ANALYTICS_UNIV_PLOT_BASE;
-      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(univRecords, "all_subj_grade", pid);
-      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(univRecords, pid);
-      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(univRecords, pid);
-      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(univRecords, pid);
-      if (years.length > 1 && document.getElementById("univ-analytics-year-apptype")) {
-        renderYearApptypeTrendTable(univAllRecords, years, "univ-analytics-year-apptype");
-      }
-
-      bindGradeBandModeTogglesScoped(contentEl, univRecords);
-      bindApptypeBandModeTogglesScoped(contentEl, univRecords);
-      bindPlotExportButtons(contentEl);
-      bindPlotTableButtons(contentEl);
-
-      analyticsView.scrollIntoView({ behavior: "instant" });
-    }
-
-    function hideUnivAnalytics() {
-      const listView = document.getElementById("univ-list-view");
-      const analyticsView = document.getElementById("univ-analytics-view");
-      const contentEl = document.getElementById("univ-analytics-content");
-      if (listView) listView.hidden = false;
-      if (analyticsView) analyticsView.hidden = true;
-      analyticsViewState.univTab = { active: false, entries: [], univ: "" };
-      cleanupAnalyticsPlots(contentEl);
-      if (contentEl) contentEl.innerHTML = "";
-    }
-
-    function showDeptAnalytics(entries, records, allRecords, metaYears) {
-      const listView = document.getElementById("dept-list-view");
-      const analyticsView = document.getElementById("dept-analytics-view");
-      const titleEl = document.getElementById("dept-analytics-title");
-      const subtitleEl = document.getElementById("dept-analytics-subtitle");
-      const contentEl = document.getElementById("dept-analytics-content");
-      if (!listView || !analyticsView || !contentEl || !entries.length) return;
-
-      listView.hidden = true;
-      analyticsView.hidden = false;
-      analyticsViewState.deptTab = { active: true, entries: entries.map(e => ({ ...e })) };
-
-      const entryKeySet = new Set(entries.flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
-      const deptRecords = records.filter((r) => entryKeySet.has(buildDeptFinderKey(r.univ, r.dept)));
-      const deptAllRecords = allRecords.filter((r) => entryKeySet.has(buildDeptFinderKey(r.univ, r.dept)));
-      const years = metaYears || [];
-
-      if (titleEl) {
-        titleEl.textContent = entries.length === 1
-          ? buildDeptFinderAnalyticsTitle(entries[0])
-          : `${buildDeptFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
-      }
-      const yearScope = formatAcademicYearScope(deptRecords);
-      if (subtitleEl) {
-        const subtitleParts = [];
-        if (entries.length === 1) subtitleParts.push(buildDeptFinderUniversitySummary(entries[0]));
-        subtitleParts.push(`총 ${deptRecords.length}건`);
-        if (yearScope) subtitleParts.push(yearScope);
-        subtitleEl.textContent = subtitleParts.join(" · ");
-      }
-
-      cleanupAnalyticsPlots(contentEl);
-      contentEl.innerHTML = "";
-
-      let plotCounter = ANALYTICS_DEPT_PLOT_BASE;
-      const block = buildPlotBlock(
-        deptRecords, plotCounter, entries.length === 1 ? buildDeptFinderAnalyticsTitle(entries[0]) : "선택 학과",
-        true, false, true, true, false, true, false, false, true
-      );
-      renderState.plotRegistryData[plotCounter] = block.data;
-      plotCounter++;
-
-      let html = `<div class="dept-container section-overall">
-        <div class="section-hint"><strong>전형별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
-        ${block.html}
-      </div>`;
-
-      const deptUnivSet = new Set(deptRecords.map((r) => r.univ || "미상"));
-      const showDeptTop20 = deptUnivSet.size >= 2;
-      if (showDeptTop20) {
-        html += buildUnivTopSectionHtml("dept");
-      }
-
-      if (years.length > 1) {
-        html += `<div class="dept-container section-year-comparison">
-          <div class="dept-header">연도별 비교</div>
-          <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
-          </div></div>
-            <div id="dept-analytics-year-apptype" class="aux-container"></div>
-          </div>
-        </div>`;
-      }
-
-      contentEl.innerHTML = html;
-
-      // 분석 뷰: 모든 aux 컨테이너를 직접 동기 렌더 (requestAnimationFrame 타이밍 이슈 방지)
-      const pid = ANALYTICS_DEPT_PLOT_BASE;
-      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(deptRecords, "all_subj_grade", pid);
-      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(deptRecords, pid);
-      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(deptRecords, pid);
-      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(deptRecords, pid);
-      if (years.length > 1 && document.getElementById("dept-analytics-year-apptype")) {
-        renderYearApptypeTrendTable(deptAllRecords, years, "dept-analytics-year-apptype");
-      }
-
-      if (showDeptTop20) {
-        renderUnivTop(deptRecords, "dept");
-        bindUnivTopModeToggle(deptRecords, "dept");
-        bindUnivTopSortToggle(deptRecords, "dept");
-      } else {
-        univTopRecordsByScope.delete("dept");
-      }
-
-      bindGradeBandModeTogglesScoped(contentEl, deptRecords);
-      bindApptypeBandModeTogglesScoped(contentEl, deptRecords);
-      bindPlotExportButtons(contentEl);
-      bindPlotTableButtons(contentEl);
-
-      analyticsView.scrollIntoView({ behavior: "instant" });
-    }
-
-    function hideDeptAnalytics() {
-      const listView = document.getElementById("dept-list-view");
-      const analyticsView = document.getElementById("dept-analytics-view");
-      const contentEl = document.getElementById("dept-analytics-content");
-      if (listView) listView.hidden = false;
-      if (analyticsView) analyticsView.hidden = true;
-      analyticsViewState.deptTab = { active: false, entries: [] };
-      univTopRecordsByScope.delete("dept");
-      cleanupAnalyticsPlots(contentEl);
-      if (contentEl) contentEl.innerHTML = "";
     }
 
     function buildDeptFinderKey(univ, dept) {
@@ -5112,13 +4774,6 @@ body.protected-export-locked {
           renderDeptFinder(records, { updateConditionSummary: true });
         });
       }
-      if (openBtn) {
-        openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedDeptEntries(getCachedDeptFinderEntries(records, getDeptFinderGroupingMode()));
-          if (!selectedEntries.length) return;
-          showDeptAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
-        });
-      }
     }
 
     function buildSubtypeFinderRecordKey(apptype, subtype) {
@@ -5364,13 +5019,6 @@ body.protected-export-locked {
           renderSubtypeFinder(records, { updateConditionSummary: true });
         });
       }
-      if (openBtn) {
-        openBtn.addEventListener("click", () => {
-          const selectedEntries = getSelectedSubtypeEntries(getCachedSubtypeFinderEntries(records));
-          if (!selectedEntries.length) return;
-          showSubtypeAnalytics(selectedEntries, records, dataState.metaAllRecords || records, dataState.metaYears || []);
-        });
-      }
     }
 
     function normalizeSubtypeAnalyticsEntries(selection, records) {
@@ -5387,101 +5035,6 @@ body.protected-export-locked {
         return entries.filter((entry) => entry.subtype === selection);
       }
       return [];
-    }
-
-    function showSubtypeAnalytics(selection, records, allRecords, metaYears) {
-      const listView = document.getElementById("subtype-list-view");
-      const analyticsView = document.getElementById("subtype-analytics-view");
-      const titleEl = document.getElementById("subtype-analytics-title");
-      const subtitleEl = document.getElementById("subtype-analytics-subtitle");
-      const contentEl = document.getElementById("subtype-analytics-content");
-      const entries = normalizeSubtypeAnalyticsEntries(selection, records);
-      if (!listView || !analyticsView || !contentEl || !entries.length) return;
-
-      listView.hidden = true;
-      analyticsView.hidden = false;
-      analyticsViewState.subtypeTab = {
-        active: true,
-        entries: entries.map((entry) => ({ key: entry.key, subtype: entry.subtype })),
-      };
-
-      const entryKeySet = new Set(entries.flatMap((entry) => getSubtypeFinderEntryMatchKeys(entry)));
-      const subtypeRecords = records.filter((r) => entryKeySet.has(buildSubtypeFinderRecordKey(r.apptype, r.subtype)));
-      const subtypeAllRecords = allRecords.filter((r) => entryKeySet.has(buildSubtypeFinderRecordKey(r.apptype, r.subtype)));
-      const years = metaYears || [];
-
-      if (titleEl) {
-        titleEl.textContent = entries.length === 1
-          ? buildSubtypeFinderAnalyticsTitle(entries[0])
-          : `${buildSubtypeFinderLabel(entries[0])} 외 ${entries.length - 1}개`;
-      }
-
-      const yearScope = formatAcademicYearScope(subtypeRecords);
-      if (subtitleEl) {
-        const subtitleParts = [];
-        if (entries.length === 1) subtitleParts.push(buildSubtypeFinderApptypeSummary(entries[0]));
-        subtitleParts.push(`총 ${subtypeRecords.length}건`);
-        if (yearScope) subtitleParts.push(yearScope);
-        subtitleEl.textContent = subtitleParts.join(" · ");
-      }
-
-      cleanupAnalyticsPlots(contentEl);
-      contentEl.innerHTML = "";
-
-      let plotCounter = ANALYTICS_SUBTYPE_PLOT_BASE;
-      const block = buildPlotBlock(
-        subtypeRecords,
-        plotCounter,
-        entries.length === 1 ? buildSubtypeFinderAnalyticsTitle(entries[0]) : "선택 세부유형",
-        true, false, true, true, false, true, false, false, true
-      );
-      renderState.plotRegistryData[plotCounter] = block.data;
-      plotCounter++;
-
-      let html = `<div class="dept-container section-overall">
-        <div class="section-hint"><strong>전형별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
-        ${block.html}
-      </div>`;
-
-      if (years.length > 1) {
-        html += `<div class="dept-container section-year-comparison">
-          <div class="dept-header">연도별 비교</div>
-          <div class="card"><div class="card-head"><div class="card-head-copy"><h3>전형별 현황</h3>
-            <div class="card-note">전형을 행으로 두고, 각 연도 칸에서 <strong>지원건수</strong>, <strong>지원 비율</strong>, <strong>합격건수(충원포함)</strong>, <strong>합격률</strong>을 함께 비교합니다.</div>
-          </div></div>
-            <div id="subtype-analytics-year-apptype" class="aux-container"></div>
-          </div>
-        </div>`;
-      }
-
-      contentEl.innerHTML = html;
-
-      const pid = ANALYTICS_SUBTYPE_PLOT_BASE;
-      if (document.getElementById(`band-bar-${pid}`)) renderGradeBands(subtypeRecords, "all_subj_grade", pid);
-      if (document.getElementById(`apptype-band-section-${pid}`)) renderApptypeGradeBandComparisons(subtypeRecords, pid);
-      if (document.getElementById(`apptype-table-${pid}`)) renderApptypeStats(subtypeRecords, pid);
-      if (document.getElementById(`region-table-${pid}`)) renderRegionStats(subtypeRecords, pid);
-      if (years.length > 1 && document.getElementById("subtype-analytics-year-apptype")) {
-        renderYearApptypeTrendTable(subtypeAllRecords, years, "subtype-analytics-year-apptype");
-      }
-
-      bindGradeBandModeTogglesScoped(contentEl, subtypeRecords);
-      bindApptypeBandModeTogglesScoped(contentEl, subtypeRecords);
-      bindPlotExportButtons(contentEl);
-      bindPlotTableButtons(contentEl);
-
-      analyticsView.scrollIntoView({ behavior: "instant" });
-    }
-
-    function hideSubtypeAnalytics() {
-      const listView = document.getElementById("subtype-list-view");
-      const analyticsView = document.getElementById("subtype-analytics-view");
-      const contentEl = document.getElementById("subtype-analytics-content");
-      if (listView) listView.hidden = false;
-      if (analyticsView) analyticsView.hidden = true;
-      analyticsViewState.subtypeTab = { active: false, entries: [] };
-      cleanupAnalyticsPlots(contentEl);
-      if (contentEl) contentEl.innerHTML = "";
     }
 
     function normalizeConditionKeyList(keys = [], type = "") {
@@ -6740,30 +6293,48 @@ body.protected-export-locked {
       return `${Number(band.from).toFixed(2)} ~ ${Number(band.to - 0.01).toFixed(2)}`;
     }
 
+    // 모달이 보여줄 데이터 범위(scope)를 지정한다. 카테고리/대학/학과/등급대 모달은
+    // 각자 다른 부분집합(연도 필터·조건 조회 등)으로 열릴 수 있으므로, 전역 보고서 데이터
+    // (dataState.reportRecords)를 덮어쓰지 않고 여기에만 보관한다. scope가 바뀌면 뷰 행
+    // 캐시도 무효화해야 다른 scope의 결과가 잘못 재사용되지 않는다.
+    function setModalScope(records) {
+      modalState.sourceRecords = Array.isArray(records) ? records : [];
+      dataState.detailViewRowsCache = new Map();
+    }
+
+    function getModalScopeRecords() {
+      return modalState.sourceRecords && modalState.sourceRecords.length
+        ? modalState.sourceRecords
+        : dataState.reportRecords;
+    }
+
     function getDetailRowsForView(view) {
       if (!view) return [];
       const cacheKey = getDetailViewCacheKey(view);
       if (cacheKey && dataState.detailViewRowsCache.has(cacheKey)) {
         return dataState.detailViewRowsCache.get(cacheKey);
       }
+      // 학생 뷰는 "지원 전체 목록"이므로 항상 전역 보고서 데이터를 본다.
+      // 나머지 뷰는 모달을 연 곳에서 지정한 scope(부분집합)를 본다.
+      const scopeRecords = view.type === "student" ? dataState.reportRecords : getModalScopeRecords();
       let detailRows = [];
       if (view.type === "univ") {
-        detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => r.univ === view.univ));
+        detailRows = sortRowsByGrade(scopeRecords.filter((r) => r.univ === view.univ));
       } else if (view.type === "deptSelection") {
         const keySet = new Set((view.entries || []).flatMap((entry) => getDeptFinderEntryMatchKeys(entry)));
-        detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => keySet.has(buildDeptFinderKey(r.univ, r.dept))));
+        detailRows = sortRowsByGrade(scopeRecords.filter((r) => keySet.has(buildDeptFinderKey(r.univ, r.dept))));
       } else if (view.type === "apptype") {
-        detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => (r.apptype || "미상") === view.value));
+        detailRows = sortRowsByGrade(scopeRecords.filter((r) => (r.apptype || "미상") === view.value));
       } else if (view.type === "region") {
-        detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => (r.region || "미상") === view.value));
+        detailRows = sortRowsByGrade(scopeRecords.filter((r) => (r.region || "미상") === view.value));
       } else if (view.type === "gradeBand") {
-        detailRows = sortRowsByGrade(dataState.reportRecords.filter((r) => {
+        detailRows = sortRowsByGrade(scopeRecords.filter((r) => {
           if (r[view.key] === null || r[view.key] < view.band.from || r[view.key] >= view.band.to) return false;
           if (view.categoryType === "apptype") return (r.apptype || "미상") === view.categoryValue;
           return true;
         }));
       } else if (view.type === "student") {
-        detailRows = dataState.reportRecords
+        detailRows = scopeRecords
           .filter((r) => isSameStudentRecord(r, view.student))
           .sort((a, b) => {
             const resultDiff = RESULT_ORDER.indexOf(a.result) - RESULT_ORDER.indexOf(b.result);
@@ -6878,14 +6449,13 @@ body.protected-export-locked {
     function buildExportRows(records, options = {}) {
       const { includeUniv = false } = options;
       const fmtGrade = (v) => v === null || v === undefined || Number.isNaN(v) ? "" : Number(v).toFixed(2);
+      // 내보내기 컬럼은 상세 표(및 셀 툴팁)에 실제로 보이는 항목으로만 한정한다.
+      // 화면에 표시하지 않는 소재지·농어촌(개인 민감정보)과 지역(대학)·전형유형은
+      // 보이는 정보보다 더 많은 정보가 새어 나가지 않도록 내보내기에서 제외한다.
+      // (컬럼 순서는 getDetailTableColumns의 화면 순서를 따른다.)
       return records.map((r) => {
-        const row = {
-          "학년도": r.academic_year || "",
-          "소재지": r.school_location || "",
-          "지역(대학)": r.region || "",
-        };
+        const row = { "학년도": r.academic_year || "" };
         if (includeUniv) row["대학"] = r.univ || "";
-        row["전형유형"] = r.apptype || "";
         row["세부유형"] = r.subtype || "";
         row["모집단위"] = r.dept || "";
         row["모집인원"] = r.enrollment_count != null ? r.enrollment_count : "";
@@ -6893,13 +6463,14 @@ body.protected-export-locked {
         row["결과"] = r.result || "";
         row["등록"] = formatRegistrationDisplay(r.registered_yn);
         row["전교과등급"] = fmtGrade(r.all_subj_grade);
-        row["환산등급(일반)"] = fmtGrade(r.conv_grade);
-        row["환산등급(일반+진로)"] = fmtGrade(r.conv_grade_ext);
-        row["농어촌"] = r.is_rural || "";
+        // 전교과등급 셀 툴팁으로 보이는 5등급 환산 추정치
         ESTIMATED_FIVE_GRADE_STANDARDS.forEach((standard) => {
           const estimated = formatEstimatedFiveGrade(r.all_subj_grade, standard.key);
           row[`5등급(${standard.label})`] = estimated === "-" ? "" : estimated;
         });
+        row["환산등급(일반)"] = fmtGrade(r.conv_grade);
+        // 환산(일반) 셀 툴팁으로 보이는 값
+        row["환산등급(일반+진로)"] = fmtGrade(r.conv_grade_ext);
         return row;
       });
     }
@@ -6919,6 +6490,7 @@ body.protected-export-locked {
         detailModalEl.hidden = false;
         document.body.style.overflow = "hidden";
         detailModalBodyEl.scrollTop = 0;
+        updateDetailToolbarOffset();
         return;
       }
       const detailRows = getDetailRowsForView(currentView);
@@ -6952,17 +6524,18 @@ body.protected-export-locked {
       detailModalEl.hidden = false;
       document.body.style.overflow = "hidden";
       detailModalBodyEl.scrollTop = 0;
+      updateDetailToolbarOffset();
     }
 
     function openUnivDetailModal(univ, records) {
-      dataState.reportRecords = records;
+      setModalScope(records);
       modalState.viewStack = [createDetailModalView({ type: "univ", univ })];
       renderDetailModalView();
     }
 
     function openDeptSelectionDetailModal(entries, records) {
       if (!entries || !entries.length) return;
-      dataState.reportRecords = records;
+      setModalScope(records);
       modalState.viewStack = [createDetailModalView({
         type: "deptSelection",
         entries: entries.map((entry) => ({
@@ -6979,7 +6552,7 @@ body.protected-export-locked {
     }
 
     function openCategoryDetailModal(type, value, label, records) {
-      dataState.reportRecords = records;
+      setModalScope(records);
       modalState.viewStack = [createDetailModalView({ type, value, label })];
       renderDetailModalView();
     }
@@ -7001,7 +6574,7 @@ body.protected-export-locked {
     function openGradeBandDetailModal(label, key, records, options = {}) {
       const band = getGradeBandDefinition(label);
       if (!band) return;
-      dataState.reportRecords = records;
+      setModalScope(records);
       modalState.viewStack = [createDetailModalView({
         type: "gradeBand",
         label,
@@ -7046,10 +6619,6 @@ body.protected-export-locked {
       currentView[meta.filterKey] = Array.isArray(values) ? [...values] : [];
       currentView.page = 1;
       renderDetailModalView();
-    }
-
-    function handleDetailDeptFilterChange(deptFilters) {
-      handleDetailComboFilterChange("dept", deptFilters);
     }
 
     function handleDetailResultFilterChange(value) {
@@ -7203,6 +6772,9 @@ body.protected-export-locked {
       detailModalBodyEl.innerHTML = "";
       document.body.style.overflow = "";
       modalState.viewStack = [];
+      // 모달이 잡고 있던 scope(부분집합 참조)를 놓아준다. 다음에 모달을 열면
+      // 해당 오프너가 setModalScope로 다시 지정한다.
+      modalState.sourceRecords = [];
       detailModalBackBtn.hidden = true;
       detailModalExportBtn.hidden = true;
     }
