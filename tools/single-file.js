@@ -17,6 +17,7 @@ const VENDOR_SCRIPTS = [
   { name: "xlsx", token: "{{INLINE_XLSX_JS}}", path: path.join(VENDOR_DIR, "xlsx.full.min.js") },
   { name: "plotly", token: "{{INLINE_PLOTLY_JS}}", path: path.join(VENDOR_DIR, "plotly.min.js") },
 ];
+const ALL_INLINE_TOKENS = [STYLE_TOKEN, APP_TOKEN, ...VENDOR_SCRIPTS.map((vendor) => vendor.token)];
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -24,6 +25,28 @@ function ensureDir(dirPath) {
 
 function readUtf8(filePath) {
   return fs.readFileSync(filePath, "utf8");
+}
+
+function replaceToken(content, token, replacement) {
+  return content.replace(token, () => replacement);
+}
+
+function makeInlineScriptHtmlSafe(content) {
+  return content.replace(/<\/(script|body|html)/gi, (_, tagName) => `<\\/${tagName}`);
+}
+
+function assertNoInlineTokens(content, label) {
+  const leftovers = ALL_INLINE_TOKENS.filter((token) => content.includes(token));
+  if (leftovers.length) {
+    throw new Error(`${label}에 치환되지 않은 토큰이 남아 있습니다: ${leftovers.join(", ")}`);
+  }
+}
+
+function assertInlineScriptIsHtmlSafe(content, label) {
+  const unsafeMatch = content.match(/<\/(script|body|html)/i);
+  if (unsafeMatch) {
+    throw new Error(`${label}에 ${unsafeMatch[0]} 문자열이 있어 인라인 HTML을 깨뜨릴 수 있습니다.`);
+  }
 }
 
 function writeUtf8(filePath, content) {
@@ -80,12 +103,14 @@ function build() {
     }
   }
 
-  let built = template
-    .replace(STYLE_TOKEN, styles)
-    .replace(APP_TOKEN, app);
+  let built = replaceToken(template, STYLE_TOKEN, styles);
+  built = replaceToken(built, APP_TOKEN, makeInlineScriptHtmlSafe(app));
   for (const vendor of VENDOR_SCRIPTS) {
-    built = built.replace(vendor.token, readUtf8(vendor.path).trimEnd());
+    const vendorContent = makeInlineScriptHtmlSafe(readUtf8(vendor.path).trimEnd());
+    assertInlineScriptIsHtmlSafe(vendorContent, vendor.path);
+    built = replaceToken(built, vendor.token, vendorContent);
   }
+  assertNoInlineTokens(built, "index.html");
 
   writeUtf8(INDEX_PATH, built);
   console.log("build 완료: index.html 재생성");
@@ -95,12 +120,14 @@ function check() {
   const template = readUtf8(TEMPLATE_PATH);
   const styles = readUtf8(STYLE_PATH).trimEnd();
   const app = readUtf8(APP_PATH).trimEnd();
-  let expected = template
-    .replace(STYLE_TOKEN, styles)
-    .replace(APP_TOKEN, app);
+  let expected = replaceToken(template, STYLE_TOKEN, styles);
+  expected = replaceToken(expected, APP_TOKEN, makeInlineScriptHtmlSafe(app));
   for (const vendor of VENDOR_SCRIPTS) {
-    expected = expected.replace(vendor.token, readUtf8(vendor.path).trimEnd());
+    const vendorContent = makeInlineScriptHtmlSafe(readUtf8(vendor.path).trimEnd());
+    assertInlineScriptIsHtmlSafe(vendorContent, vendor.path);
+    expected = replaceToken(expected, vendor.token, vendorContent);
   }
+  assertNoInlineTokens(expected, "index.html 기대값");
   const current = readUtf8(INDEX_PATH);
   if (current === expected) {
     console.log("check 통과: index.html이 src 소스와 일치합니다.");
