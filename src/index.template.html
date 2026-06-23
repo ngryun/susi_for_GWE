@@ -78,8 +78,12 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <script data-vendor="xlsx">
+{{INLINE_XLSX_JS}}
+  </script>
+  <script data-vendor="plotly">
+{{INLINE_PLOTLY_JS}}
+  </script>
   <script>
 {{INLINE_APP_JS}}
   </script>

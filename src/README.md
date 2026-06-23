@@ -7,6 +7,7 @@
 - `src/styles.css`: 전체 스타일
 - `src/app.js`: 메인 앱 로직
 - `src/index.template.html`: HTML 뼈대
+- `src/vendor/`: 배포용 `index.html`에 포함할 외부 라이브러리
 
 명령어:
 

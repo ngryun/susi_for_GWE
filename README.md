@@ -64,11 +64,11 @@
 ## 기술 스택
 
 - 순수 HTML + CSS + JavaScript (프레임워크 없음)
-- [SheetJS (xlsx)](https://sheetjs.com/) — 엑셀 파싱 (CDN)
-- [Plotly.js](https://plotly.com/javascript/) — 차트 (CDN)
+- [SheetJS (xlsx)](https://sheetjs.com/) — 엑셀 파싱 (배포용 HTML에 포함)
+- [Plotly.js](https://plotly.com/javascript/) — 차트 (배포용 HTML에 포함)
 - Web Crypto API — 공유 파일 암호화
 
-> 인터넷 연결이 가능한 환경에서 처음 한 번 로딩하면 라이브러리가 캐시됩니다. 오프라인 사용이 필요하면 두 라이브러리를 같은 폴더에 함께 두고 `index.html`의 `<script src>` 경로를 로컬 파일로 바꿔서 사용하세요.
+> 배포용 `index.html`에는 엑셀 파서와 차트 라이브러리가 함께 포함되어 있어 CDN 접속 없이도 실행됩니다.
 
 ## 개발자 가이드
 
@@ -78,7 +78,8 @@
 src/
 ├── index.template.html   # HTML 뼈대
 ├── styles.css            # 전체 스타일
-└── app.js                # 메인 앱 로직 (모든 분석·UI)
+├── app.js                # 메인 앱 로직 (모든 분석·UI)
+└── vendor/               # 단일 HTML에 포함할 외부 라이브러리
 tools/
 └── single-file.js        # 빌드 / 추출 / 검증 스크립트
 index.html                # 배포용 단일 파일 (위 셋을 합친 결과)
@@ -110,7 +111,7 @@ node tools/single-file.js check
 
 - 데스크탑 브라우저: Chrome 90+, Edge 90+, Firefox 90+, Safari 15+
 - 모바일 브라우저에서도 동작하지만 화면이 좁아 데스크탑 사용을 권장
-- 인터넷 연결: CDN 라이브러리 로딩에 필요 (오프라인은 위의 기술 스택 참고)
+- 인터넷 연결: 프로그램 실행과 엑셀 분석에는 필요 없음
 
 ## 만든 사람 · 문의
 

@@ -9,9 +9,14 @@ const SRC_DIR = path.join(ROOT, "src");
 const TEMPLATE_PATH = path.join(SRC_DIR, "index.template.html");
 const STYLE_PATH = path.join(SRC_DIR, "styles.css");
 const APP_PATH = path.join(SRC_DIR, "app.js");
+const VENDOR_DIR = path.join(SRC_DIR, "vendor");
 
 const STYLE_TOKEN = "{{INLINE_STYLE}}";
 const APP_TOKEN = "{{INLINE_APP_JS}}";
+const VENDOR_SCRIPTS = [
+  { name: "xlsx", token: "{{INLINE_XLSX_JS}}", path: path.join(VENDOR_DIR, "xlsx.full.min.js") },
+  { name: "plotly", token: "{{INLINE_PLOTLY_JS}}", path: path.join(VENDOR_DIR, "plotly.min.js") },
+];
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -37,9 +42,16 @@ function extract() {
     throw new Error("index.html에서 메인 인라인 <script> 블록을 찾지 못했습니다.");
   }
 
-  const template = html
+  let template = html
     .replace(styleMatch[0], `<style>\n${STYLE_TOKEN}\n  </style>`)
     .replace(appScriptMatch[0], `  <script>\n${APP_TOKEN}\n  </script>\n</body>`);
+  for (const vendor of VENDOR_SCRIPTS) {
+    const vendorScriptPattern = new RegExp(`  <script data-vendor="${vendor.name}">\\n[\\s\\S]*?\\n  <\\/script>`);
+    template = template.replace(
+      vendorScriptPattern,
+      `  <script data-vendor="${vendor.name}">\n${vendor.token}\n  </script>`
+    );
+  }
 
   writeUtf8(TEMPLATE_PATH, template);
   writeUtf8(STYLE_PATH, styleMatch[1].trimEnd() + "\n");
@@ -62,10 +74,18 @@ function build() {
   if (!template.includes(APP_TOKEN)) {
     throw new Error(`템플릿에 ${APP_TOKEN} 토큰이 없습니다.`);
   }
+  for (const vendor of VENDOR_SCRIPTS) {
+    if (!template.includes(vendor.token)) {
+      throw new Error(`템플릿에 ${vendor.token} 토큰이 없습니다.`);
+    }
+  }
 
-  const built = template
+  let built = template
     .replace(STYLE_TOKEN, styles)
     .replace(APP_TOKEN, app);
+  for (const vendor of VENDOR_SCRIPTS) {
+    built = built.replace(vendor.token, readUtf8(vendor.path).trimEnd());
+  }
 
   writeUtf8(INDEX_PATH, built);
   console.log("build 완료: index.html 재생성");
@@ -75,9 +95,12 @@ function check() {
   const template = readUtf8(TEMPLATE_PATH);
   const styles = readUtf8(STYLE_PATH).trimEnd();
   const app = readUtf8(APP_PATH).trimEnd();
-  const expected = template
+  let expected = template
     .replace(STYLE_TOKEN, styles)
     .replace(APP_TOKEN, app);
+  for (const vendor of VENDOR_SCRIPTS) {
+    expected = expected.replace(vendor.token, readUtf8(vendor.path).trimEnd());
+  }
   const current = readUtf8(INDEX_PATH);
   if (current === expected) {
     console.log("check 통과: index.html이 src 소스와 일치합니다.");

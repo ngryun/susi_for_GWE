@@ -476,6 +476,19 @@
       if (uploadPanelEl) uploadPanelEl.hidden = !isVisible;
     }
 
+    function validateRuntimeLibraries() {
+      const missing = [];
+      if (typeof XLSX === "undefined" || !XLSX || typeof XLSX.read !== "function" || !XLSX.utils) {
+        missing.push("엑셀 처리 라이브러리");
+      }
+      if (typeof Plotly === "undefined" || !Plotly || typeof Plotly.newPlot !== "function") {
+        missing.push("차트 라이브러리");
+      }
+      if (missing.length) {
+        throw new Error(`${missing.join(", ")}를 불러오지 못했습니다. 프로그램 파일이 손상되었거나 브라우저가 스크립트 실행을 차단했습니다. 최신 index.html을 다시 내려받아 Chrome 또는 Edge에서 열어주세요.`);
+      }
+    }
+
     async function handleGenerate() {
       const files = Array.from(fileInput.files);
       if (!files.length) {
@@ -490,6 +503,7 @@
         return;
       }
       try {
+        validateRuntimeLibraries();
         updateGenerateProgress(
           "업로드 확인 중",
           `엑셀 ${files.length}개 파일을 순서대로 불러오고 있습니다.`,
