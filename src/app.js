@@ -745,7 +745,30 @@
     }
 
     function detectExcelLayout(sheet, allRows = []) {
-      if (!isSchoolExcelLayout(sheet, allRows)) return createLegacyExcelLayout();
+      if (!isSchoolExcelLayout(sheet, allRows)) {
+        // 학교 양식 앵커(학년/반/번호) 중 일부만 있으면, 학교 양식을 의도했으나
+        // 일부 열이 빠진 파일로 보고 어떤 열이 누락/잘못 배치됐는지 명확히 알려준다.
+        const anchors = findSchoolAnchorColumns(sheet, allRows);
+        const presentKeys = SCHOOL_ANCHOR_LABELS.filter(({ key }) => anchors[key] !== undefined);
+        if (presentKeys.length) {
+          const missingLabels = SCHOOL_ANCHOR_LABELS
+            .filter(({ key }) => anchors[key] === undefined)
+            .map(({ label }) => label);
+          if (missingLabels.length) {
+            throw new Error(
+              `학교 업로드 양식으로 보이지만 1행(머리글)에서 필수 열을 찾을 수 없습니다 → ${missingLabels.join(", ")}. `
+              + "1행 맨 앞에 학년, 반, 번호 열이 순서대로 있는지 확인하세요."
+            );
+          }
+          const orderText = SCHOOL_ANCHOR_LABELS
+            .map(({ key, label }) => `${label}(현재 ${anchors[key] + 1}번째 열)`)
+            .join(", ");
+          throw new Error(
+            `학교 업로드 양식의 1행은 맨 앞부터 학년, 반, 번호 순서여야 합니다. 현재 열 위치: ${orderText}. 열 순서를 확인하세요.`
+          );
+        }
+        return createLegacyExcelLayout();
+      }
 
       const subjectGradeRange = findSchoolSubjectGradeRange(sheet, allRows);
       const csatRange = subjectGradeRange
@@ -814,10 +837,31 @@
       };
     }
 
+    const SCHOOL_ANCHOR_LABELS = [
+      { key: "grade", label: "학년", expectedCol: 0 },
+      { key: "class_no", label: "반", expectedCol: 1 },
+      { key: "student_no", label: "번호", expectedCol: 2 },
+    ];
+
+    // 1행(머리글)에서 학교 양식의 앵커 열(학년/반/번호)이 어느 열에 있는지 찾는다.
+    // 열이 통째로 삭제되어 순서가 밀린 경우도 잡기 위해 앞쪽 여러 열을 훑는다.
+    function findSchoolAnchorColumns(sheet, allRows = []) {
+      const found = {};
+      const scanColumnCount = 8;
+      for (let colIndex = 0; colIndex < scanColumnCount; colIndex += 1) {
+        const value = getMergedHeaderValue(sheet, allRows, 0, colIndex);
+        SCHOOL_ANCHOR_LABELS.forEach(({ key, label }) => {
+          if (found[key] === undefined && headerMatches(value, label)) {
+            found[key] = colIndex;
+          }
+        });
+      }
+      return found;
+    }
+
     function isSchoolExcelLayout(sheet, allRows = []) {
-      return headerMatches(getMergedHeaderValue(sheet, allRows, 0, 0), "학년")
-        && headerMatches(getMergedHeaderValue(sheet, allRows, 0, 1), "반")
-        && headerMatches(getMergedHeaderValue(sheet, allRows, 0, 2), "번호");
+      const anchors = findSchoolAnchorColumns(sheet, allRows);
+      return SCHOOL_ANCHOR_LABELS.every(({ key, expectedCol }) => anchors[key] === expectedCol);
     }
 
     function validateRequiredColumnsInHeaderRows(allRows, fileLabel, layout = null) {
