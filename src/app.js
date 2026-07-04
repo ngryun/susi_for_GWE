@@ -245,6 +245,8 @@
     const univTopRecordsByScope = new Map();
     const finderEntryCacheByRecords = new WeakMap();
     const yearTableExportRegistry = {};
+    // 공유용 HTML에서 엑셀 저장 기능을 차단할 때 사용 (내보내기 옵션으로 설정됨)
+    let excelExportDisabled = false;
     const COMBO_KINDS = {
       dept: { label: "모집단위", placeholder: "모집단위 검색...", filterKey: "deptFilter", rowKey: "dept" },
       univ: { label: "대학명", placeholder: "대학명 검색...", filterKey: "univFilter", rowKey: "univ" },
@@ -2213,6 +2215,9 @@ body.protected-export-locked {
       const exportContext = options.scope === "activePage"
         ? buildActivePageSharedExportContext()
         : buildFullSharedExportContext();
+      if (options.disableExcelExport === true || excelExportDisabled) {
+        exportContext.uiState.disableExcelExport = true;
+      }
       const htmlContent = await buildSharedHtmlDocument(exportContext.records, exportContext.uiState, {
         password,
         studentCsatData: exportContext.studentCsatData,
@@ -2251,6 +2256,10 @@ body.protected-export-locked {
             <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportPasswordConfirm">암호 확인</label>
             <input id="sharedExportPasswordConfirm" type="password" placeholder="암호를 다시 입력" autocomplete="new-password" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:11px 12px; font:inherit;">
             <div style="font-size:12px; line-height:1.55; color:#64748b; margin-top:8px;">암호 없이도 저장할 수 있습니다. 다만 개인정보가 포함된 보고서를 공유할 때는 10자 이상, 영문/숫자/기호를 섞거나 긴 문장형 암호를 권장합니다.</div>
+            <label style="display:flex; align-items:flex-start; gap:8px; margin-top:14px; cursor:pointer;" for="sharedExportDisableExcel">
+              <input id="sharedExportDisableExcel" type="checkbox" ${excelExportDisabled ? "checked" : ""} style="margin-top:2px;">
+              <span style="font-size:13px; line-height:1.55; color:#374151;"><strong>엑셀 저장 버튼 숨기기</strong><br><span style="font-size:12px; color:#64748b;">저장된 HTML에서 표·상세 화면의 엑셀 저장 버튼을 모두 숨깁니다. 민감한 자료를 공유할 때 권장합니다.</span></span>
+            </label>
             <div id="sharedExportOptionsError" style="min-height:18px; font-size:12px; color:#b91c1c; margin-top:10px;"></div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
               <button type="button" id="cancelSharedExport" style="border:1px solid #d1d5db; background:#fff; color:#374151; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">취소</button>
@@ -2264,6 +2273,7 @@ body.protected-export-locked {
       const filenameInput = document.getElementById("sharedExportFilename");
       const passwordInput = document.getElementById("sharedExportPassword");
       const confirmInput = document.getElementById("sharedExportPasswordConfirm");
+      const disableExcelInput = document.getElementById("sharedExportDisableExcel");
       const errorDiv = document.getElementById("sharedExportOptionsError");
       const closeModal = () => modal.remove();
 
@@ -2282,8 +2292,9 @@ body.protected-export-locked {
           if (confirmInput) confirmInput.focus();
           return;
         }
+        const disableExcelExport = !!(disableExcelInput && disableExcelInput.checked);
         try {
-          await downloadSharedHtml({ password, scope, filenameBase });
+          await downloadSharedHtml({ password, scope, filenameBase, disableExcelExport });
           closeModal();
         } catch (error) {
           console.error(error);
@@ -2731,6 +2742,7 @@ body.protected-export-locked {
 	    }
 
     function downloadYearTableXlsx(exportId) {
+      if (excelExportDisabled) return;
       const config = yearTableExportRegistry[exportId];
       const rows = config && typeof config.getRows === "function" ? config.getRows(config) : (config && config.rows);
       if (!config || !Array.isArray(rows) || !rows.length) return;
@@ -2745,8 +2757,12 @@ body.protected-export-locked {
       const uniquePassButton = options.includeUniquePassToggle
         ? `<button type="button" class="year-table-unique-pass-btn" data-year-unique-pass-toggle="${escapeHtml(exportId)}" aria-pressed="false" title="같은 학생의 여러 합격을 1명으로 계산한 단수합격건수를 표에 표시합니다.">단수합격건수 조회</button>`
         : "";
+      const exportButton = excelExportDisabled
+        ? ""
+        : `<button type="button" class="year-table-export-btn" data-year-table-export="${escapeHtml(exportId)}" title="현재 표를 엑셀 파일로 저장합니다.">엑셀 저장</button>`;
+      if (!exportButton && !uniquePassButton) return "";
       return `<div class="year-table-actions">
-        <button type="button" class="year-table-export-btn" data-year-table-export="${escapeHtml(exportId)}" title="현재 표를 엑셀 파일로 저장합니다.">엑셀 저장</button>
+        ${exportButton}
         ${uniquePassButton}
       </div>`;
     }
@@ -5977,9 +5993,10 @@ body.protected-export-locked {
       const rangeText = pagination && filteredCount
         ? `${(pagination.startIndex + 1).toLocaleString()}~${pagination.endIndex.toLocaleString()}건`
         : `${filteredLabel}건`;
+      const excelHintText = excelExportDisabled ? "" : " · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.";
       const metaText = activeBadges.length
-        ? `${activeBadges.join(" · ")} 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`} · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`
-        : `총 ${filteredLabel}건 중 ${rangeText} 표시 · 엑셀 저장은 현재 필터 기준으로 다운로드합니다.`;
+        ? `${activeBadges.join(" · ")} 기준 ${rangeText} 표시${filteredCount !== totalCount ? ` · 필터 결과 ${filteredLabel}건 · 전체 ${totalLabel}건` : ` · 전체 ${totalLabel}건`}${excelHintText}`
+        : `총 ${filteredLabel}건 중 ${rangeText} 표시${excelHintText}`;
       const filtersHtml = !showFilters ? "" : [
         buildResultToggleHtml(currentResult),
         univOptions.length > 1 ? buildMultiComboHtml("univ", univOptions, selUniv) : "",
@@ -6527,7 +6544,7 @@ body.protected-export-locked {
       }
       if (currentView.type === "summaryTable") {
         detailModalBackBtn.hidden = modalState.viewStack.length <= 1;
-        detailModalExportBtn.hidden = !(Array.isArray(currentView.exportRows) && currentView.exportRows.length);
+        detailModalExportBtn.hidden = excelExportDisabled || !(Array.isArray(currentView.exportRows) && currentView.exportRows.length);
         detailModalTitleEl.textContent = currentView.title || "집계표";
         detailModalSubtitleEl.textContent = currentView.subtitle || "";
         detailModalBodyEl.innerHTML = buildSummaryTableHtml(currentView);
@@ -6549,7 +6566,7 @@ body.protected-export-locked {
       const viewConfig = getDetailViewConfig(currentView, filteredRows);
       currentView.disableDeptFilter = !!viewConfig.disableDeptFilter;
       detailModalBackBtn.hidden = modalState.viewStack.length <= 1;
-      detailModalExportBtn.hidden = !filteredRows.length;
+      detailModalExportBtn.hidden = excelExportDisabled || !filteredRows.length;
       detailModalTitleEl.textContent = viewConfig.title;
       detailModalSubtitleEl.textContent = viewConfig.subtitle;
       detailModalBodyEl.innerHTML = buildDetailTable(visibleRows, {
@@ -6789,6 +6806,7 @@ body.protected-export-locked {
     }
 
     function handleDetailModalExport() {
+      if (excelExportDisabled) return;
       const currentView = modalState.viewStack[modalState.viewStack.length - 1];
       if (!currentView) return;
       if (currentView.type === "summaryTable") {
@@ -7068,6 +7086,7 @@ body.protected-export-locked {
       filterState.yearFilter = "all";
       filterState.locationFilter = "all";
       const preloadedState = pre.uiState && typeof pre.uiState === "object" ? pre.uiState : {};
+      excelExportDisabled = preloadedState.disableExcelExport === true;
       renderFullReport(
         normalizedRecords,
         "",
