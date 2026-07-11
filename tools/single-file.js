@@ -10,14 +10,16 @@ const TEMPLATE_PATH = path.join(SRC_DIR, "index.template.html");
 const STYLE_PATH = path.join(SRC_DIR, "styles.css");
 const APP_PATH = path.join(SRC_DIR, "app.js");
 const VENDOR_DIR = path.join(SRC_DIR, "vendor");
+const LOGO_PATH = path.join(ROOT, "logo_img", "BI_가로조합.png".normalize("NFD"));
 
 const STYLE_TOKEN = "{{INLINE_STYLE}}";
 const APP_TOKEN = "{{INLINE_APP_JS}}";
+const LOGO_TOKEN = "{{INLINE_BRAND_LOGO}}";
 const VENDOR_SCRIPTS = [
   { name: "xlsx", token: "{{INLINE_XLSX_JS}}", path: path.join(VENDOR_DIR, "xlsx.full.min.js") },
   { name: "plotly", token: "{{INLINE_PLOTLY_JS}}", path: path.join(VENDOR_DIR, "plotly.min.js") },
 ];
-const ALL_INLINE_TOKENS = [STYLE_TOKEN, APP_TOKEN, ...VENDOR_SCRIPTS.map((vendor) => vendor.token)];
+const ALL_INLINE_TOKENS = [STYLE_TOKEN, APP_TOKEN, LOGO_TOKEN, ...VENDOR_SCRIPTS.map((vendor) => vendor.token)];
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -68,6 +70,10 @@ function extract() {
   let template = html
     .replace(styleMatch[0], `<style>\n${STYLE_TOKEN}\n  </style>`)
     .replace(appScriptMatch[0], `  <script>\n${APP_TOKEN}\n  </script>\n</body>`);
+  template = template.replace(
+    /(<img\b[^>]*\bid="landing-brand-logo"[^>]*\bsrc=")[^"]*(")/,
+    `$1${LOGO_TOKEN}$2`
+  );
   for (const vendor of VENDOR_SCRIPTS) {
     const vendorScriptPattern = new RegExp(`  <script data-vendor="${vendor.name}">\\n[\\s\\S]*?\\n  <\\/script>`);
     template = template.replace(
@@ -90,12 +96,16 @@ function build() {
   const template = readUtf8(TEMPLATE_PATH);
   const styles = readUtf8(STYLE_PATH).trimEnd();
   const app = readUtf8(APP_PATH).trimEnd();
+  const logoDataUri = `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString("base64")}`;
 
   if (!template.includes(STYLE_TOKEN)) {
     throw new Error(`템플릿에 ${STYLE_TOKEN} 토큰이 없습니다.`);
   }
   if (!template.includes(APP_TOKEN)) {
     throw new Error(`템플릿에 ${APP_TOKEN} 토큰이 없습니다.`);
+  }
+  if (!template.includes(LOGO_TOKEN)) {
+    throw new Error(`템플릿에 ${LOGO_TOKEN} 토큰이 없습니다.`);
   }
   for (const vendor of VENDOR_SCRIPTS) {
     if (!template.includes(vendor.token)) {
@@ -105,6 +115,7 @@ function build() {
 
   let built = replaceToken(template, STYLE_TOKEN, styles);
   built = replaceToken(built, APP_TOKEN, makeInlineScriptHtmlSafe(app));
+  built = replaceToken(built, LOGO_TOKEN, logoDataUri);
   for (const vendor of VENDOR_SCRIPTS) {
     const vendorContent = makeInlineScriptHtmlSafe(readUtf8(vendor.path).trimEnd());
     assertInlineScriptIsHtmlSafe(vendorContent, vendor.path);
@@ -120,8 +131,10 @@ function check() {
   const template = readUtf8(TEMPLATE_PATH);
   const styles = readUtf8(STYLE_PATH).trimEnd();
   const app = readUtf8(APP_PATH).trimEnd();
+  const logoDataUri = `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString("base64")}`;
   let expected = replaceToken(template, STYLE_TOKEN, styles);
   expected = replaceToken(expected, APP_TOKEN, makeInlineScriptHtmlSafe(app));
+  expected = replaceToken(expected, LOGO_TOKEN, logoDataUri);
   for (const vendor of VENDOR_SCRIPTS) {
     const vendorContent = makeInlineScriptHtmlSafe(readUtf8(vendor.path).trimEnd());
     assertInlineScriptIsHtmlSafe(vendorContent, vendor.path);
