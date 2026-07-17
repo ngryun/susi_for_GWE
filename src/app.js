@@ -130,13 +130,15 @@
       separate: {
         pass: { strong: "rgba(5, 150, 105, 0.82)", weak: "rgba(5, 150, 105, 0.36)" },
         wait: { strong: "rgba(217, 119, 6, 0.72)", weak: "rgba(217, 119, 6, 0.34)" },
-        fail: { strong: "rgba(220, 38, 38, 0.58)", weak: "rgba(220, 38, 38, 0.28)" },
+        fail: { strong: "rgba(220, 38, 38, 0.32)", weak: "rgba(220, 38, 38, 0.16)" },
       },
       merged: {
         pass: { strong: "rgba(5, 150, 105, 0.82)", weak: "rgba(5, 150, 105, 0.36)" },
-        fail: { strong: "rgba(220, 38, 38, 0.58)", weak: "rgba(220, 38, 38, 0.28)" },
+        fail: { strong: "rgba(220, 38, 38, 0.32)", weak: "rgba(220, 38, 38, 0.16)" },
       },
     };
+    // 스택 세그먼트 사이를 배경색으로 띄워 주는 구분선 (dataviz surface-gap 규칙)
+    const STACK_SEGMENT_GAP_LINE = { width: 1.5, color: "#ffffff" };
     const UNIV_PASS_BAND_LABEL = "합격자 중앙 50%";
     const UNIV_PASS_BAND_DESCRIPTION = "합격·충원합격 학생의 전교과등급 가운데 50% 범위";
     const UNIV_PASS_BAND_SMALL_SAMPLE_TEXT = "표본 적음";
@@ -4037,7 +4039,21 @@ body.protected-export-locked {
       });
     }
 
-    function renderGradeBandPlot(graphEl, stats, mode, yMax, onSelect) {
+    function countUsedGradeBands(stats) {
+      let last = stats.length - 1;
+      while (last > 0 && stats[last].total === 0) last--;
+      return last + 1;
+    }
+
+    // 데이터가 없는 뒤쪽 등급대(예: 7~9등급대 0건)를 잘라내 차트 폭을 실제 데이터에 쓴다.
+    // fixedBandCount는 나란히 비교하는 차트끼리 x축을 맞출 때 사용한다.
+    function trimTrailingEmptyGradeBands(stats, fixedBandCount = 0) {
+      const count = Math.min(stats.length, Math.max(countUsedGradeBands(stats), fixedBandCount, 4));
+      return stats.slice(0, count);
+    }
+
+    function renderGradeBandPlot(graphEl, stats, mode, yMax, onSelect, fixedBandCount = 0) {
+      stats = trimTrailingEmptyGradeBands(stats, fixedBandCount);
       const labels = stats.map((s) => s.label);
       const totals = stats.map((s) => s.total);
       const passCounts = stats.map((s) => s.pass);
@@ -4059,7 +4075,7 @@ body.protected-export-locked {
             y: passCounts,
             type: "bar",
             name: "합격",
-            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "pass", s.isLowSample)), line: { width: 0 } },
+            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "pass", s.isLowSample)), line: STACK_SEGMENT_GAP_LINE },
             customdata: hoverData,
             hovertemplate: buildGradeBandHoverTemplate("합격"),
           },
@@ -4068,7 +4084,7 @@ body.protected-export-locked {
             y: waitCounts,
             type: "bar",
             name: "충원합격",
-            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "wait", s.isLowSample)), line: { width: 0 } },
+            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "wait", s.isLowSample)), line: STACK_SEGMENT_GAP_LINE },
             customdata: hoverData,
             hovertemplate: buildGradeBandHoverTemplate("충원합격"),
           },
@@ -4077,7 +4093,7 @@ body.protected-export-locked {
             y: failCounts,
             type: "bar",
             name: "불합격",
-            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "fail", s.isLowSample)), line: { width: 0 } },
+            marker: { color: stats.map((s) => getGradeBandBarColor("separate", "fail", s.isLowSample)), line: STACK_SEGMENT_GAP_LINE },
             customdata: hoverData,
             hovertemplate: buildGradeBandHoverTemplate("불합격"),
           }
@@ -4089,7 +4105,7 @@ body.protected-export-locked {
             y: mergedPassCounts,
             type: "bar",
             name: "합격(충원포함)",
-            marker: { color: stats.map((s) => getGradeBandBarColor("merged", "pass", s.isLowSample)), line: { width: 0 } },
+            marker: { color: stats.map((s) => getGradeBandBarColor("merged", "pass", s.isLowSample)), line: STACK_SEGMENT_GAP_LINE },
             customdata: hoverData,
             hovertemplate: buildGradeBandHoverTemplate("합격(충원포함)"),
           },
@@ -4098,7 +4114,7 @@ body.protected-export-locked {
             y: failCounts,
             type: "bar",
             name: "불합격",
-            marker: { color: stats.map((s) => getGradeBandBarColor("merged", "fail", s.isLowSample)), line: { width: 0 } },
+            marker: { color: stats.map((s) => getGradeBandBarColor("merged", "fail", s.isLowSample)), line: STACK_SEGMENT_GAP_LINE },
             customdata: hoverData,
             hovertemplate: buildGradeBandHoverTemplate("불합격"),
           }
@@ -5366,6 +5382,7 @@ body.protected-export-locked {
         noteId = `band-note-${targetPlotId}`,
         barId = `band-bar-${targetPlotId}`,
         fixedYMax = null,
+        fixedBandCount = 0,
         syncModeButtons = () => syncGradeBandModeButtons(targetPlotId),
         onSelect = (label) => openGradeBandDetailModal(String(label), key, records),
       } = options;
@@ -5378,7 +5395,7 @@ body.protected-export-locked {
       syncModeButtons();
       const barEl = document.getElementById(barId);
       if (barEl) {
-        renderGradeBandPlot(barEl, stats, mode, getGradeBandYAxisMax(stats, fixedYMax), onSelect);
+        renderGradeBandPlot(barEl, stats, mode, getGradeBandYAxisMax(stats, fixedYMax), onSelect, fixedBandCount);
       }
     }
 
@@ -5431,13 +5448,16 @@ body.protected-export-locked {
       }).join("")}</div>`;
       bindPlotExportButtons(hostEl);
       bindPlotTableButtons(hostEl);
-      const sharedYMax = Math.max(...groups.map((group) => getGradeBandYAxisMax(makeGradeBandStats(group.subset, "all_subj_grade").stats)), 4);
+      const groupStats = groups.map((group) => makeGradeBandStats(group.subset, "all_subj_grade").stats);
+      const sharedYMax = Math.max(...groupStats.map((stats) => getGradeBandYAxisMax(stats)), 4);
+      const sharedBandCount = Math.max(...groupStats.map(countUsedGradeBands), 4);
       groups.forEach((group, index) => {
         renderGradeBands(group.subset, "all_subj_grade", plotId, {
           modeKey: `apptype-band-${plotId}`,
           noteId: `apptype-band-note-${plotId}-${index}`,
           barId: `apptype-band-bar-${plotId}-${index}`,
           fixedYMax: sharedYMax,
+          fixedBandCount: sharedBandCount,
           syncModeButtons: () => syncApptypeBandModeButtons(plotId),
           onSelect: (label) => openGradeBandDetailModal(String(label), "all_subj_grade", records, {
             categoryType: "apptype",
@@ -6989,15 +7009,15 @@ body.protected-export-locked {
         const buildHoverTemplate = (label) => `<b>%{y}</b><br>${label}: %{customdata[0]}건<br>${UNIV_PASS_BAND_LABEL}: %{customdata[1]}<br>%{customdata[2]}<extra></extra>`;
         Plotly.newPlot(univTopEl, [
           { y: labelsTop, x: xData.pass, type: "bar", name: "합격", orientation: "h",
-            marker: { color: "rgba(5, 150, 105, 0.78)", line: { width: 0 } },
+            marker: { color: "rgba(5, 150, 105, 0.78)", line: STACK_SEGMENT_GAP_LINE },
             customdata: buildHoverCustomData(countData.pass),
             hovertemplate: buildHoverTemplate("합격") },
           { y: labelsTop, x: xData.wait, type: "bar", name: "충원합격", orientation: "h",
-            marker: { color: "rgba(217, 119, 6, 0.68)", line: { width: 0 } },
+            marker: { color: "rgba(217, 119, 6, 0.68)", line: STACK_SEGMENT_GAP_LINE },
             customdata: buildHoverCustomData(countData.wait),
             hovertemplate: buildHoverTemplate("충원합격") },
           { y: labelsTop, x: xData.fail, type: "bar", name: "불합격", orientation: "h",
-            marker: { color: "rgba(220, 38, 38, 0.58)", line: { width: 0 } },
+            marker: { color: "rgba(220, 38, 38, 0.32)", line: STACK_SEGMENT_GAP_LINE },
             customdata: buildHoverCustomData(countData.fail),
             hovertemplate: buildHoverTemplate("불합격") },
         ], {
@@ -7048,7 +7068,7 @@ body.protected-export-locked {
           y: failCounts.map((v) => -v),
           type: "bar",
           name: "불합격",
-          marker: { color: "rgba(220, 38, 38, 0.55)", line: { width: 0 } },
+          marker: { color: "rgba(220, 38, 38, 0.45)", line: { width: 0 } },
           width: BINS.size * 0.85,
           hovertemplate: "등급 %{x}: %{customdata}건<extra>불합격</extra>",
           customdata: failCounts,
