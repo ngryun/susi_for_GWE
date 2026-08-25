@@ -214,7 +214,7 @@
         deptFinderGroupingMode: DEFAULT_DEPT_FINDER_GROUPING_MODE,
         selectedDeptKeys: [],
         selectedSubtypeKeys: [],
-        yearFilter: "all",
+        selectedYears: [],
         locationFilter: "all",
       },
       data: {
@@ -583,7 +583,7 @@
         dataState.studentCsatByKey = studentCsatByKey;
         dataState.studentSubjectGradeByKey = studentSubjectGradeByKey;
         const years = getAvailableYears(records);
-        filterState.yearFilter = "all";
+        filterState.selectedYears = [];
         filterState.locationFilter = "all";
         updateGenerateProgress(
           "보고서 화면 구성 중",
@@ -1469,10 +1469,32 @@
       records.forEach(r => { if (r.academic_year) years.add(r.academic_year); });
       return Array.from(years).sort((a, b) => a - b);
     }
-    function filterRecordsByYear(records, yearFilter) {
-      if (yearFilter === "all") return records;
-      const year = parseInt(yearFilter, 10);
-      return records.filter(r => r.academic_year === year);
+    function getSelectedYearFilters(availableYears = []) {
+      const yearSet = new Set(
+        (Array.isArray(filterState.selectedYears) ? filterState.selectedYears : [])
+          .map((year) => parseAcademicYear(year))
+          .filter((year) => year !== null)
+      );
+      return availableYears.filter((year) => yearSet.has(year));
+    }
+    function isAllYearsSelected(availableYears = []) {
+      const selectedYears = getSelectedYearFilters(availableYears);
+      return selectedYears.length === 0 || selectedYears.length === availableYears.length;
+    }
+    function getEffectiveSelectedYears(availableYears = []) {
+      return isAllYearsSelected(availableYears)
+        ? [...availableYears]
+        : getSelectedYearFilters(availableYears);
+    }
+    function filterRecordsByYear(records, selectedYears = []) {
+      if (!Array.isArray(selectedYears) || !selectedYears.length) return records;
+      const yearSet = new Set(
+        selectedYears
+          .map((year) => parseAcademicYear(year))
+          .filter((year) => year !== null)
+      );
+      if (!yearSet.size) return records;
+      return records.filter((record) => yearSet.has(record.academic_year));
     }
     function deriveLocationType(schoolLocation) {
       const loc = safe(schoolLocation);
@@ -1488,7 +1510,7 @@
       return records.filter(r => deriveLocationType(r.school_location) === locationFilter);
     }
     function applyGlobalFilters(allRecords) {
-      let filtered = filterRecordsByYear(allRecords, filterState.yearFilter);
+      let filtered = filterRecordsByYear(allRecords, filterState.selectedYears);
       filtered = filterRecordsByLocation(filtered, filterState.locationFilter);
       return filtered;
     }
@@ -2446,6 +2468,8 @@ body.protected-export-locked {
       const { univs, depts, apptypes, subtypes, years } = index;
       const metaYears = meta.years || years;
       const metaAllRecords = meta.allRecords || records;
+      const allYearsSelected = isAllYearsSelected(metaYears);
+      const effectiveSelectedYears = getEffectiveSelectedYears(metaYears);
       // onclick 핸들러에서 접근할 수 있도록 dataState에 저장
       dataState.metaYears = metaYears;
       dataState.metaAllRecords = metaAllRecords;
@@ -2465,9 +2489,12 @@ body.protected-export-locked {
           ${(metaYears.length > 1 || hasMultipleLocationTypes(metaAllRecords)) ? `<div class="global-filter-row">
             ${metaYears.length > 1 ? `<div class="year-filter-bar" id="year-filter-bar">
               <span class="year-filter-label">학년도</span>
-              <div class="segmented-control" id="year-filter-group">
-                <button type="button" class="segmented-btn ${filterState.yearFilter === "all" ? "active" : ""}" data-year="all">전체</button>
-                ${metaYears.map(y => `<button type="button" class="segmented-btn ${String(filterState.yearFilter) === String(y) ? "active" : ""}" data-year="${y}">${y}</button>`).join("")}
+              <div class="segmented-control" id="year-filter-group" role="group" aria-label="학년도 복수 선택">
+                <button type="button" class="segmented-btn ${allYearsSelected ? "active" : ""}" data-year="all" aria-pressed="${allYearsSelected}">전체</button>
+                ${metaYears.map(y => {
+                  const isActive = !allYearsSelected && effectiveSelectedYears.includes(y);
+                  return `<button type="button" class="segmented-btn ${isActive ? "active" : ""}" data-year="${y}" aria-pressed="${isActive}">${y}</button>`;
+                }).join("")}
               </div>
             </div>` : ""}
             ${hasMultipleLocationTypes(metaAllRecords) ? `<div class="year-filter-bar" id="location-filter-bar">
@@ -2528,9 +2555,8 @@ body.protected-export-locked {
 
       summaryEl.insertAdjacentHTML("beforeend", buildUnivTopSectionHtml("global"));
 
-      if (filterState.yearFilter === "all" && metaYears.length > 1) {
-        const locationFilteredAll = filterRecordsByLocation(metaAllRecords, filterState.locationFilter);
-        summaryEl.insertAdjacentHTML("beforeend", buildYearComparisonSection(locationFilteredAll, metaYears));
+      if (effectiveSelectedYears.length > 1) {
+        summaryEl.insertAdjacentHTML("beforeend", buildYearComparisonSection(records, effectiveSelectedYears));
       }
 
       conditionEl.innerHTML = `<div id="condition-list-view">
@@ -3031,9 +3057,29 @@ body.protected-export-locked {
       if (!group) return;
       group.querySelectorAll("[data-year]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const nextYear = btn.dataset.year;
-          if (nextYear === filterState.yearFilter) return;
-          filterState.yearFilter = nextYear;
+          const nextYear = btn.dataset.year || "";
+          if (nextYear === "all") {
+            if (isAllYearsSelected(years)) return;
+            filterState.selectedYears = [];
+            reapplyGlobalFilters(allRecords, years);
+            return;
+          }
+
+          const parsedYear = parseAcademicYear(nextYear);
+          if (parsedYear === null || !years.includes(parsedYear)) return;
+
+          const wasAllYearsSelected = isAllYearsSelected(years);
+          let selectedYears = wasAllYearsSelected
+            ? [parsedYear]
+            : getSelectedYearFilters(years);
+          if (!wasAllYearsSelected && selectedYears.includes(parsedYear)) {
+            if (selectedYears.length === 1) return;
+            selectedYears = selectedYears.filter((year) => year !== parsedYear);
+          } else if (!selectedYears.includes(parsedYear)) {
+            selectedYears.push(parsedYear);
+          }
+          selectedYears = years.filter((year) => selectedYears.includes(year));
+          filterState.selectedYears = selectedYears.length === years.length ? [] : selectedYears;
           reapplyGlobalFilters(allRecords, years);
         });
       });
@@ -3492,14 +3538,12 @@ body.protected-export-locked {
       if (document.getElementById("univ-top-chart-global")) {
         renderState.auxRendererMap["univ-top-chart-global"] = () => renderUnivTop(records, "global");
 	      }
-	      const yrs = metaYears || [];
-	      const all = allRecords || records;
-	      const locFilteredAll = filterRecordsByLocation(all, filterState.locationFilter);
+	      const yrs = getEffectiveSelectedYears(metaYears || getAvailableYears(records));
 	      if (document.getElementById("year-apptype-trend-table")) {
-	        renderState.auxRendererMap["year-apptype-trend-table"] = () => renderYearApptypeTrendTable(locFilteredAll, yrs, "year-apptype-trend-table");
+	        renderState.auxRendererMap["year-apptype-trend-table"] = () => renderYearApptypeTrendTable(records, yrs, "year-apptype-trend-table");
 	      }
 	      if (document.getElementById("year-univ-trend-table")) {
-	        renderState.auxRendererMap["year-univ-trend-table"] = () => renderYearUnivTrendTable(locFilteredAll, yrs, "year-univ-trend-table");
+	        renderState.auxRendererMap["year-univ-trend-table"] = () => renderYearUnivTrendTable(records, yrs, "year-univ-trend-table");
 	      }
 	    }
 
@@ -5286,8 +5330,9 @@ body.protected-export-locked {
         renderConditionQuerySummary(records);
         return;
       }
-      const conditionAllRecords = filterRecordsByConditionCriteria(allRecords, criteria);
-      const years = metaYears || [];
+      const globallyFilteredRecords = applyGlobalFilters(allRecords);
+      const conditionAllRecords = filterRecordsByConditionCriteria(globallyFilteredRecords, criteria);
+      const years = getEffectiveSelectedYears(metaYears || getAvailableYears(allRecords));
 
       listView.hidden = true;
       analyticsView.hidden = false;
@@ -7103,7 +7148,7 @@ body.protected-export-locked {
       dataState.studentCsatByKey = restoreStudentCsatMap(pre.studentCsat);
       dataState.studentSubjectGradeByKey = restoreSubjectGradeMap(pre.subjectGrade);
       const years = getAvailableYears(normalizedRecords);
-      filterState.yearFilter = "all";
+      filterState.selectedYears = [];
       filterState.locationFilter = "all";
       const preloadedState = pre.uiState && typeof pre.uiState === "object" ? pre.uiState : {};
       excelExportDisabled = preloadedState.disableExcelExport === true;
