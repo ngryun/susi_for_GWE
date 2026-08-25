@@ -10,7 +10,7 @@ const TEMPLATE_PATH = path.join(SRC_DIR, "index.template.html");
 const STYLE_PATH = path.join(SRC_DIR, "styles.css");
 const APP_PATH = path.join(SRC_DIR, "app.js");
 const VENDOR_DIR = path.join(SRC_DIR, "vendor");
-const LOGO_PATH = path.join(ROOT, "logo_img", "BI_가로조합.png".normalize("NFD"));
+const LOGO_PATH = path.join(ROOT, "logo_img", "BI_가로조합.png");
 
 const STYLE_TOKEN = "{{INLINE_STYLE}}";
 const APP_TOKEN = "{{INLINE_APP_JS}}";
