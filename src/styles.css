@@ -384,6 +384,23 @@
       box-shadow: var(--shadow-sm);
       font-weight: 600;
     }
+    .tab-year-scope {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.09);
+      color: #2563eb;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.4;
+      vertical-align: 1px;
+    }
+    .tab-btn.active .tab-year-scope {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
@@ -1141,6 +1158,24 @@
     }
     .section-overall .dept-header,
     .section-top20 .dept-header { border-bottom-color: var(--border); }
+    .section-overall .dept-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .dept-header-year-scope {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
 
     /* Subtype Container */
     .subtype-container {
@@ -2046,6 +2081,10 @@
 
     /* Filter Info */
     .filter-info {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 12px;
       margin: 0 0 20px;
       background: var(--surface-alt);
       border: 1px solid var(--border);
@@ -2054,6 +2093,26 @@
       color: var(--text-secondary);
       font-weight: 500;
       font-size: 13px;
+    }
+    .filter-year-scope {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .filter-year-scope strong {
+      color: #1d4ed8;
+      font-size: 12px;
+    }
+    .filter-info-detail {
+      min-width: 0;
     }
 
     /* Year Filter Bar */
@@ -2070,11 +2129,40 @@
       align-items: center;
       gap: 10px;
     }
+    .year-filter-heading {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
     .year-filter-label {
       font-size: 12px;
       font-weight: 600;
       color: var(--text-secondary);
       white-space: nowrap;
+    }
+    .year-selection-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-alt);
+      color: var(--text-tertiary);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .year-selection-status.is-single {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+      color: #2563eb;
+    }
+    .year-selection-status.is-multiple {
+      border-color: #60a5fa;
+      background: #dbeafe;
+      color: #1d4ed8;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.10);
     }
 
     /* Year Comparison Section */
@@ -2300,6 +2388,25 @@
       color: var(--text-primary);
       box-shadow: var(--shadow-sm);
       font-weight: 600;
+    }
+    #year-filter-group {
+      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    #year-filter-group.is-multiple-selection {
+      border-color: #93c5fd;
+      background: #eff6ff;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.10);
+    }
+    #year-filter-group .segmented-btn.active:not([data-year="all"]) {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.24);
+    }
+    #year-filter-group .segmented-btn.active:not([data-year="all"])::before {
+      content: "✓";
+      margin-right: 4px;
+      font-size: 10px;
+      font-weight: 800;
     }
     .control-stack {
       display: flex;

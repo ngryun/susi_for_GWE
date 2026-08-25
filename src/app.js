@@ -1529,12 +1529,14 @@
     function hasRuralRecords(records) {
       return records.some(r => r.is_rural === "O");
     }
-    function formatAcademicYearScope(records = []) {
-      const years = getAvailableYears(records);
+    function formatAcademicYearValues(years = []) {
       if (!years.length) return "";
       if (years.length === 1) return `${years[0]}학년도`;
       if (years.length <= 3) return `${years.join("·")}학년도`;
       return `${years[0]}~${years[years.length - 1]}학년도`;
+    }
+    function formatAcademicYearScope(records = []) {
+      return formatAcademicYearValues(getAvailableYears(records));
     }
     function buildAcademicYearTitleSuffix(records = []) {
       const scope = formatAcademicYearScope(records);
@@ -2470,6 +2472,11 @@ body.protected-export-locked {
       const metaAllRecords = meta.allRecords || records;
       const allYearsSelected = isAllYearsSelected(metaYears);
       const effectiveSelectedYears = getEffectiveSelectedYears(metaYears);
+      const selectedYearScopeLabel = formatAcademicYearValues(effectiveSelectedYears);
+      const isMultipleYearSelection = !allYearsSelected && effectiveSelectedYears.length > 1;
+      const yearSelectionStatusLabel = allYearsSelected
+        ? `전체 ${effectiveSelectedYears.length}개`
+        : (isMultipleYearSelection ? `복수 선택 ${effectiveSelectedYears.length}개` : "1개 선택");
       // onclick 핸들러에서 접근할 수 있도록 dataState에 저장
       dataState.metaYears = metaYears;
       dataState.metaAllRecords = metaAllRecords;
@@ -2488,8 +2495,11 @@ body.protected-export-locked {
           <div id="header-build-info" class="header-build-info"></div>
           ${(metaYears.length > 1 || hasMultipleLocationTypes(metaAllRecords)) ? `<div class="global-filter-row">
             ${metaYears.length > 1 ? `<div class="year-filter-bar" id="year-filter-bar">
-              <span class="year-filter-label">학년도</span>
-              <div class="segmented-control" id="year-filter-group" role="group" aria-label="학년도 복수 선택">
+              <span class="year-filter-heading">
+                <span class="year-filter-label">학년도</span>
+                <span class="year-selection-status ${isMultipleYearSelection ? "is-multiple" : (allYearsSelected ? "is-all" : "is-single")}" title="${escapeHtml(selectedYearScopeLabel)}">${escapeHtml(yearSelectionStatusLabel)}</span>
+              </span>
+              <div class="segmented-control ${isMultipleYearSelection ? "is-multiple-selection" : ""}" id="year-filter-group" role="group" aria-label="학년도 복수 선택, 현재 ${escapeHtml(selectedYearScopeLabel)}">
                 <button type="button" class="segmented-btn ${allYearsSelected ? "active" : ""}" data-year="all" aria-pressed="${allYearsSelected}">전체</button>
                 ${metaYears.map(y => {
                   const isActive = !allYearsSelected && effectiveSelectedYears.includes(y);
@@ -2515,7 +2525,7 @@ body.protected-export-locked {
           <main class="main-content">
             <div class="tab-bar-sticky">
               <div class="tab-bar" id="report-tabs">
-                <button type="button" class="tab-btn ${activeTab === "summary" ? "active" : ""}" data-tab="summary">전체데이터요약</button>
+                <button type="button" class="tab-btn ${activeTab === "summary" ? "active" : ""}" data-tab="summary">전체데이터요약 <span class="tab-year-scope">${escapeHtml(selectedYearScopeLabel)}</span></button>
                 <button type="button" class="tab-btn ${activeTab === "condition" ? "active" : ""}" data-tab="condition">조건별조회</button>
                 <button type="button" class="tab-btn ${activeTab === "trend" ? "active" : ""}" data-tab="trend">지원경향조회</button>
               </div>
@@ -2537,17 +2547,17 @@ body.protected-export-locked {
       const subtypeSearchQuery = typeof options.subtypeFinderQuery === "string" ? options.subtypeFinderQuery : "";
       let plotCounter = 1;
 
-      const yearInfo = years.length > 0 ? `학년도 ${years.length} · ` : "";
       const filterSummary = `
         <div class="filter-info">
-          총 ${records.length}건 · ${yearInfo}대학 ${univs.length} · 모집단위 ${depts.length} · 전형유형 ${apptypes.length} · 전형 ${subtypes.length}
+          <span class="filter-year-scope"><span>선택 학년도</span><strong>${escapeHtml(selectedYearScopeLabel)}</strong></span>
+          <span class="filter-info-detail">총 ${records.length}건 · 대학 ${univs.length} · 모집단위 ${depts.length} · 전형유형 ${apptypes.length} · 전형 ${subtypes.length}</span>
         </div>`;
       summaryEl.insertAdjacentHTML("beforeend", filterSummary);
 
       const overallBlock = buildPlotBlock(records, plotCounter, "전체 데이터", true, false, true, true, false, true, false, true, true);
       renderState.plotRegistryData[plotCounter] = overallBlock.data;
       summaryEl.insertAdjacentHTML("beforeend", `<div class="dept-container section-overall" id="overall-summary">
-          <div class="dept-header">전체 데이터 요약</div>
+          <div class="dept-header"><span>전체 데이터 요약</span><span class="dept-header-year-scope">${escapeHtml(selectedYearScopeLabel)}</span></div>
           <div class="section-hint"><strong>전형별 현황</strong>, <strong>지역별 현황</strong> 카드와 <strong>등급대 차트</strong>를 클릭하면 해당 조건의 상세 데이터를 조회할 수 있습니다.</div>
           ${overallBlock.html}
         </div>`);
