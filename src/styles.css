@@ -442,7 +442,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      min-width: 240px;
+      min-width: 0;
       flex: 1 1 280px;
     }
     .directory-search label {
@@ -1280,6 +1280,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      min-width: 0;
     }
     .detail-modal-head {
       display: flex;
@@ -1289,6 +1290,13 @@
       padding: 16px 20px;
       border-bottom: 1px solid var(--border);
       background: #ffffff;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .detail-modal-head > :first-child {
+      min-width: 0;
+      flex: 1 1 220px;
+      overflow-wrap: anywhere;
     }
     .detail-modal-title {
       margin: 0;
@@ -1302,6 +1310,7 @@
       align-items: center;
       gap: 8px;
       flex: 0 0 auto;
+      flex-wrap: wrap;
     }
     .detail-modal-back {
       min-width: auto;
@@ -1331,6 +1340,7 @@
       overflow: auto;
       background: #f8fafc;
       scrollbar-gutter: stable;
+      min-height: 0;
     }
     .detail-toolbar {
       display: flex;
@@ -2126,6 +2136,9 @@
     }
     .year-filter-bar {
       display: flex;
+      flex-wrap: wrap;
+      min-width: 0;
+      max-width: 100%;
       align-items: center;
       gap: 10px;
     }
@@ -2187,8 +2200,9 @@
     }
 
     /* Grid & Cards */
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
     .card {
+      min-width: 0;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px;
@@ -2228,10 +2242,11 @@
     }
     .apptype-band-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
       gap: 16px;
     }
     .apptype-band-card {
+      min-width: 0;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 14px 14px 10px;
@@ -2366,6 +2381,8 @@
     }
     .segmented-control {
       display: inline-flex;
+      flex-wrap: wrap;
+      max-width: 100%;
       gap: 4px;
       padding: 4px;
       border: 1px solid var(--border);
@@ -2586,16 +2603,26 @@
         width: 100%;
       }
       .detail-modal { padding: 12px; }
-      .detail-modal-dialog { max-height: 90vh; }
+      .detail-modal-dialog {
+        width: 100%;
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+      }
       .detail-modal-head { padding: 16px; }
-      .detail-modal-body { padding: 12px 16px 16px; }
+      .detail-modal-body { padding: 0 16px 16px; }
       .detail-toolbar {
         align-items: stretch;
+        /* 세로 필터가 작은 화면을 전부 덮지 않도록 본문과 함께 스크롤한다. */
+        position: static;
       }
       .detail-toolbar-main {
         flex-direction: column;
+        flex-wrap: nowrap;
+        flex-basis: auto;
         align-items: stretch;
       }
+      .detail-toolbar-meta { flex-basis: auto; }
+      .detail-table th { top: 0; }
       .detail-filter-group {
         align-items: stretch;
       }
@@ -2672,4 +2699,24 @@
         justify-content: flex-end;
       }
       .trend-table .trend-col-app { width: 168px; }
+    }
+
+    /* 높이가 낮은 창에서도 공유 설정과 저장 버튼에 스크롤로 접근한다. */
+    .shared-export-dialog {
+      max-height: calc(100vh - 48px);
+      max-height: calc(100dvh - 48px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    @media (max-width: 480px) {
+      .header-content { padding: 0 16px; }
+      .tab-btn { flex-shrink: 0; padding: 8px 12px; }
+      .filter-year-scope { white-space: normal; flex-wrap: wrap; }
+      .dept-finder-chip { max-width: 100%; overflow-wrap: anywhere; }
+      .dept-finder-chip button { flex-shrink: 0; }
+      .shared-export-actions { flex-wrap: wrap; }
+    }
+    @media (max-height: 600px) {
+      .detail-toolbar { position: static; }
+      .detail-table th { top: 0; }
     }

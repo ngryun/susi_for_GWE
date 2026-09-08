@@ -2272,7 +2272,7 @@ body.protected-export-locked {
       modal.id = "shared-export-modal";
       modal.innerHTML = `
         <div style="position:fixed; inset:0; z-index:21000; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(15,23,42,0.42); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);">
-          <div style="width:min(100%, 440px); background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.18); padding:24px;">
+          <div class="shared-export-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}" style="width:min(100%, 440px); background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.18); padding:24px;">
             <div style="font-size:18px; font-weight:700; color:#111827; margin-bottom:8px;">${escapeHtml(title)}</div>
             <div style="font-size:13px; line-height:1.6; color:#6b7280; margin-bottom:16px;">${escapeHtml(description)}</div>
             <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;" for="sharedExportFilename">파일명</label>
@@ -2287,7 +2287,7 @@ body.protected-export-locked {
               <span style="font-size:13px; line-height:1.55; color:#374151;"><strong>엑셀 저장 버튼 숨기기</strong><br><span style="font-size:12px; color:#64748b;">저장된 HTML에서 표·상세 화면의 엑셀 저장 버튼을 모두 숨깁니다. 민감한 자료를 공유할 때 권장합니다.</span></span>
             </label>
             <div id="sharedExportOptionsError" style="min-height:18px; font-size:12px; color:#b91c1c; margin-top:10px;"></div>
-            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+            <div class="shared-export-actions" style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
               <button type="button" id="cancelSharedExport" style="border:1px solid #d1d5db; background:#fff; color:#374151; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">취소</button>
               <button type="button" id="confirmSharedExport" style="border:1px solid #111827; background:#111827; color:#fff; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">${escapeHtml(confirmLabel)}</button>
             </div>
@@ -3119,6 +3119,12 @@ body.protected-export-locked {
       updateStickyTabOffset();
       requestAnimationFrame(() => {
         updateVisiblePlots();
+        // 숨겨진 탭은 창 크기 변경을 반영하지 못하므로 다시 보일 때 보조 차트도 맞춘다.
+        if (typeof Plotly !== "undefined") {
+          document.querySelectorAll(".tab-panel.active .js-plotly-plot").forEach((plot) => {
+            if (plot.clientWidth && plot.clientHeight) Plotly.Plots.resize(plot);
+          });
+        }
       });
     }
 
