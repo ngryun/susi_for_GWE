@@ -767,6 +767,65 @@
     .condition-finder-card {
       min-width: 0;
     }
+    .condition-region-card {
+      margin-bottom: 16px;
+    }
+    .condition-region-panel {
+      margin-top: 14px;
+      padding: 14px 16px 16px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(15, 118, 110, 0.06), rgba(255, 255, 255, 0.92));
+    }
+    .condition-region-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .condition-region-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .condition-region-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: auto;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .condition-region-option:hover {
+      border-color: rgba(15, 118, 110, 0.35);
+      color: var(--text-primary);
+    }
+    .condition-region-option .condition-region-count {
+      font-weight: 500;
+      color: var(--text-tertiary);
+    }
+    .condition-region-option.active {
+      background: rgba(15, 118, 110, 0.10);
+      border-color: rgba(15, 118, 110, 0.4);
+      color: #115e59;
+    }
+    .condition-region-option.active::before {
+      content: "\2713";
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .condition-region-option.active .condition-region-count {
+      color: #115e59;
+      opacity: 0.8;
+    }
     @media (max-width: 1180px) {
       .condition-finder-grid {
         grid-template-columns: 1fr;

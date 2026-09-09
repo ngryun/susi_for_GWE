@@ -214,6 +214,8 @@
         deptFinderGroupingMode: DEFAULT_DEPT_FINDER_GROUPING_MODE,
         selectedDeptKeys: [],
         selectedSubtypeKeys: [],
+        conditionRegionMode: "all",
+        selectedRegions: [],
         selectedYears: [],
         locationFilter: "all",
       },
@@ -249,6 +251,8 @@
     const yearTableExportRegistry = {};
     // 공유용 HTML에서 엑셀 저장 기능을 차단할 때 사용 (내보내기 옵션으로 설정됨)
     let excelExportDisabled = false;
+    // 공유용 HTML에서 다시 공유용 HTML을 저장(재배포)하는 기능을 차단할 때 사용 (내보내기 옵션으로 설정됨)
+    let sharedHtmlExportDisabled = false;
     const COMBO_KINDS = {
       dept: { label: "모집단위", placeholder: "모집단위 검색...", filterKey: "deptFilter", rowKey: "dept" },
       univ: { label: "대학명", placeholder: "대학명 검색...", filterKey: "univFilter", rowKey: "univ" },
@@ -1597,6 +1601,8 @@
         deptFinderSelection: Array.isArray(filterState.selectedDeptKeys) ? [...filterState.selectedDeptKeys] : [],
         subtypeFinderQuery: safe(document.getElementById("subtype-finder-search")?.value),
         subtypeFinderSelection: Array.isArray(filterState.selectedSubtypeKeys) ? [...filterState.selectedSubtypeKeys] : [],
+        conditionRegionMode: getConditionRegionMode(),
+        conditionRegionSelection: Array.isArray(filterState.selectedRegions) ? [...filterState.selectedRegions] : [],
         conditionAnalytics: {
           active: analyticsViewState.conditionTab.active,
           criteria: analyticsViewState.conditionTab.criteria ? JSON.parse(JSON.stringify(analyticsViewState.conditionTab.criteria)) : null,
@@ -2244,6 +2250,9 @@ body.protected-export-locked {
       if (options.disableExcelExport === true || excelExportDisabled) {
         exportContext.uiState.disableExcelExport = true;
       }
+      if (options.disableSharedHtmlExport === true || sharedHtmlExportDisabled) {
+        exportContext.uiState.disableSharedHtmlExport = true;
+      }
       const htmlContent = await buildSharedHtmlDocument(exportContext.records, exportContext.uiState, {
         password,
         studentCsatData: exportContext.studentCsatData,
@@ -2286,6 +2295,10 @@ body.protected-export-locked {
               <input id="sharedExportDisableExcel" type="checkbox" ${excelExportDisabled ? "checked" : ""} style="margin-top:2px;">
               <span style="font-size:13px; line-height:1.55; color:#374151;"><strong>엑셀 저장 버튼 숨기기</strong><br><span style="font-size:12px; color:#64748b;">저장된 HTML에서 표·상세 화면의 엑셀 저장 버튼을 모두 숨깁니다. 민감한 자료를 공유할 때 권장합니다.</span></span>
             </label>
+            <label style="display:flex; align-items:flex-start; gap:8px; margin-top:10px; cursor:pointer;" for="sharedExportDisableShare">
+              <input id="sharedExportDisableShare" type="checkbox" ${sharedHtmlExportDisabled ? "checked" : ""} style="margin-top:2px;">
+              <span style="font-size:13px; line-height:1.55; color:#374151;"><strong>공유용 HTML 저장 버튼 숨기기</strong><br><span style="font-size:12px; color:#64748b;">저장된 HTML에서 상단의 공유용 HTML 저장·현재 페이지 HTML 저장 버튼을 숨겨 받은 사람이 다시 배포용 파일을 만들 수 없게 합니다. 외부 배포 시 권장합니다.</span></span>
+            </label>
             <div id="sharedExportOptionsError" style="min-height:18px; font-size:12px; color:#b91c1c; margin-top:10px;"></div>
             <div class="shared-export-actions" style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
               <button type="button" id="cancelSharedExport" style="border:1px solid #d1d5db; background:#fff; color:#374151; padding:9px 14px; border-radius:10px; font:inherit; font-weight:600;">취소</button>
@@ -2300,6 +2313,7 @@ body.protected-export-locked {
       const passwordInput = document.getElementById("sharedExportPassword");
       const confirmInput = document.getElementById("sharedExportPasswordConfirm");
       const disableExcelInput = document.getElementById("sharedExportDisableExcel");
+      const disableShareInput = document.getElementById("sharedExportDisableShare");
       const errorDiv = document.getElementById("sharedExportOptionsError");
       const closeModal = () => modal.remove();
 
@@ -2319,8 +2333,9 @@ body.protected-export-locked {
           return;
         }
         const disableExcelExport = !!(disableExcelInput && disableExcelInput.checked);
+        const disableSharedHtmlExport = !!(disableShareInput && disableShareInput.checked);
         try {
-          await downloadSharedHtml({ password, scope, filenameBase, disableExcelExport });
+          await downloadSharedHtml({ password, scope, filenameBase, disableExcelExport, disableSharedHtmlExport });
           closeModal();
         } catch (error) {
           console.error(error);
@@ -2434,6 +2449,10 @@ body.protected-export-locked {
         if (typeof key !== "string") return key;
         return key.startsWith("subtype::") ? key : `subtype::${key}`;
       });
+      filterState.conditionRegionMode = options.conditionRegionMode === "some" ? "some" : "all";
+      filterState.selectedRegions = Array.isArray(options.conditionRegionSelection)
+        ? Array.from(new Set(options.conditionRegionSelection.filter((region) => typeof region === "string" && region)))
+        : [];
       dataState.reportRecords = records;
     }
 
@@ -2486,10 +2505,10 @@ body.protected-export-locked {
           <div class="header-content">
             <div class="header-top">
               <div class="site-title">2026 강원진학센터 입시분석팀</div>
-              <div class="header-actions">
+              ${sharedHtmlExportDisabled ? "" : `<div class="header-actions">
                 <button type="button" class="header-action-btn" id="export-shared-html-btn">공유용 HTML 저장</button>
                 <button type="button" class="header-action-btn" id="export-active-page-html-btn">현재 페이지 HTML 저장</button>
-              </div>
+              </div>`}
             </div>
           <h2 class="university-title">수시 입시 결과 분석 프로그램</h2>
           <div id="header-build-info" class="header-build-info"></div>
@@ -2572,7 +2591,7 @@ body.protected-export-locked {
       conditionEl.innerHTML = `<div id="condition-list-view">
           <div class="dept-container">
             <div class="dept-header">조건별 조회</div>
-            <div class="section-hint">대학, 학과, 전형 세부유형을 각각 선택한 뒤 <strong>조건 적용 상세보기</strong>를 누르면 선택한 항목이 카테고리끼리 AND 조건으로 적용됩니다. 같은 카테고리 안에서 여러 개를 고르면 OR 조건입니다.</div>
+            <div class="section-hint">지역 범위를 정하고 대학, 학과, 전형 세부유형을 각각 선택한 뒤 <strong>조건 적용 상세보기</strong>를 누르면 선택한 항목이 카테고리끼리 AND 조건으로 적용됩니다. 같은 카테고리 안에서 여러 개를 고르면 OR 조건입니다.</div>
             <div class="card condition-query-card">
               <div class="card-head">
                 <div class="card-head-copy">
@@ -2585,6 +2604,34 @@ body.protected-export-locked {
                 </div>
               </div>
               <div id="condition-query-summary" class="condition-query-summary"></div>
+            </div>
+            <div class="card condition-region-card">
+              <div class="card-head">
+                <div class="card-head-copy">
+                  <h3>지역 설정</h3>
+                  <div class="card-note">대학 소재 지역을 <strong>전체</strong> 또는 <strong>일부</strong>로 제한합니다. 일부를 고르면 선택한 지역의 대학만 조건에 포함되고, 아래 대학 검색 결과도 해당 지역으로 좁혀집니다.</div>
+                </div>
+                <div class="control-group">
+                  <div class="control-group-label">지역 범위</div>
+                  <div class="segmented-control" id="condition-region-mode-group" role="group" aria-label="대학 지역 범위 선택">
+                    <button type="button" class="segmented-btn" data-condition-region-mode="all" aria-pressed="false">전체</button>
+                    <button type="button" class="segmented-btn" data-condition-region-mode="some" aria-pressed="false">일부</button>
+                  </div>
+                </div>
+              </div>
+              <div id="condition-region-panel" class="condition-region-panel" hidden>
+                <div class="condition-region-head">
+                  <div class="dept-finder-selection-copy">
+                    <div class="dept-finder-selection-label">선택한 지역</div>
+                    <div class="dept-finder-selection-meta" id="condition-region-meta"></div>
+                  </div>
+                  <div class="dept-finder-actions">
+                    <button type="button" id="condition-region-select-all">모두 선택</button>
+                    <button type="button" id="condition-region-clear" disabled>모두 해제</button>
+                  </div>
+                </div>
+                <div id="condition-region-options" class="condition-region-options"></div>
+              </div>
             </div>
             <div class="condition-finder-grid">
               <div class="card condition-finder-card">
@@ -2726,6 +2773,8 @@ body.protected-export-locked {
       bindApptypeBandModeToggles(records);
       bindUnivTopModeToggle(records);
       bindUnivTopSortToggle(records);
+      bindConditionRegionControls(records);
+      renderConditionRegionControls(records);
       bindUnivDirectoryControls(records);
       renderUnivDirectory(records);
       bindDeptFinderControls(records);
@@ -4355,6 +4404,7 @@ body.protected-export-locked {
           const passBandMeta = buildUnivPassBandMeta(item.passGrades);
           return {
             region: regionLabel,
+            regions: Array.from(item.regions).sort(),
             univ,
             total: item.total,
             allPass,
@@ -4452,9 +4502,15 @@ body.protected-export-locked {
       const queryEl = document.getElementById("univ-directory-search");
       const keyword = safe(queryEl ? queryEl.value : "").toLowerCase();
 
-      const entries = getCachedUnivFinderEntries(records);
-      const selectedEntries = getSelectedUnivEntries(entries);
+      const allEntries = getCachedUnivFinderEntries(records);
+      const selectedRegions = getSelectedConditionRegions();
+      const regionSet = new Set(selectedRegions);
+      const entries = regionSet.size
+        ? allEntries.filter((entry) => (Array.isArray(entry.regions) && entry.regions.length ? entry.regions : ["미상"]).some((region) => regionSet.has(region)))
+        : allEntries;
+      const selectedEntries = getSelectedUnivEntries(allEntries);
       const selectedSet = new Set(selectedEntries.map((entry) => entry.key));
+      const regionScopeText = regionSet.size ? ` 현재 지역 설정(${formatRegionSelectionSummary(selectedRegions)})에 해당하는 대학만 표시합니다.` : "";
 
       selectionMetaEl.textContent = selectedEntries.length
         ? `선택 ${selectedEntries.length}개 · ${formatUnivSelectionSummary(selectedEntries)}`
@@ -4462,7 +4518,7 @@ body.protected-export-locked {
 
       if (!keyword) {
         hostEl.innerHTML = "";
-        hintEl.textContent = "대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다. 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.";
+        hintEl.textContent = `대학명을 입력하면 해당 키워드가 들어간 대학이 표시됩니다.${regionScopeText} 이미 선택한 대학은 위 칩에서 관리할 수 있습니다.`;
       } else {
         const matches = entries.filter((item) => item.univ.toLowerCase().includes(keyword));
         const addableMatches = matches.filter((entry) => !selectedSet.has(entry.key));
@@ -4471,7 +4527,9 @@ body.protected-export-locked {
 
         if (!matches.length) {
           hostEl.innerHTML = '<div class="empty">조건에 맞는 대학이 없습니다.</div>';
-          hintEl.textContent = "검색어를 바꿔 다시 찾아보세요.";
+          hintEl.textContent = regionSet.size
+            ? `검색어를 바꾸거나 지역 설정을 확인해 주세요.${regionScopeText}`
+            : "검색어를 바꿔 다시 찾아보세요.";
         } else if (!visibleMatches.length) {
           hostEl.innerHTML = '<div class="empty">검색된 대학이 모두 이미 선택되어 있습니다.</div>';
           hintEl.textContent = "위 칩에서 선택을 해제하거나 검색어를 바꿔 다시 찾아보세요.";
@@ -4533,6 +4591,134 @@ body.protected-export-locked {
         const changed = addUnivFinderSelection([key]);
         if (changed) renderUnivDirectory(records, { updateConditionSummary: true });
       };
+    }
+
+    function getConditionRegionMode() {
+      return filterState.conditionRegionMode === "some" ? "some" : "all";
+    }
+
+    function makeRegionOptionEntries(records) {
+      const grouped = {};
+      (Array.isArray(records) ? records : []).forEach((record) => {
+        const region = record.region || "미상";
+        if (!grouped[region]) grouped[region] = { region, total: 0, univs: new Set() };
+        grouped[region].total += 1;
+        grouped[region].univs.add(record.univ || "미상");
+      });
+      return Object.values(grouped)
+        .map((item) => ({ region: item.region, total: item.total, univCount: item.univs.size }))
+        .sort((a, b) => (b.total - a.total) || a.region.localeCompare(b.region, "ko"));
+    }
+
+    function getCachedRegionOptionEntries(records) {
+      const cache = getFinderEntryCache(records);
+      if (!cache.region) cache.region = makeRegionOptionEntries(records);
+      return cache.region;
+    }
+
+    // 조건별 조회에 실제로 적용되는 지역 목록. "전체" 모드이거나 "일부"에서 아무것도 고르지 않았으면 빈 배열(제한 없음).
+    function getSelectedConditionRegions() {
+      if (getConditionRegionMode() !== "some") return [];
+      return Array.isArray(filterState.selectedRegions) ? filterState.selectedRegions.filter(Boolean) : [];
+    }
+
+    function formatRegionSelectionSummary(regions = []) {
+      const list = Array.isArray(regions) ? regions.filter(Boolean) : [];
+      if (!list.length) return "전체 지역";
+      if (list.length <= 3) return list.join(", ");
+      return `${list.slice(0, 3).join(", ")} 외 ${list.length - 3}개`;
+    }
+
+    function renderConditionRegionControls(records, options = {}) {
+      const modeGroup = document.getElementById("condition-region-mode-group");
+      const panelEl = document.getElementById("condition-region-panel");
+      const optionsEl = document.getElementById("condition-region-options");
+      const metaEl = document.getElementById("condition-region-meta");
+      const selectAllBtn = document.getElementById("condition-region-select-all");
+      const clearBtn = document.getElementById("condition-region-clear");
+      if (!modeGroup || !panelEl || !optionsEl || !metaEl) return;
+
+      const mode = getConditionRegionMode();
+      modeGroup.querySelectorAll("[data-condition-region-mode]").forEach((btn) => {
+        const active = btn.dataset.conditionRegionMode === mode;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      panelEl.hidden = mode !== "some";
+
+      const entries = getCachedRegionOptionEntries(records);
+      const availableSet = new Set(entries.map((entry) => entry.region));
+      const selected = Array.isArray(filterState.selectedRegions) ? filterState.selectedRegions.filter(Boolean) : [];
+      const selectedSet = new Set(selected);
+      const selectedAvailableCount = selected.filter((region) => availableSet.has(region)).length;
+
+      optionsEl.innerHTML = entries.length
+        ? entries.map((entry) => {
+          const active = selectedSet.has(entry.region);
+          return `<button type="button" class="condition-region-option ${active ? "active" : ""}" data-condition-region="${escapeHtml(entry.region)}" aria-pressed="${active ? "true" : "false"}" title="${escapeHtml(`${entry.region} · 대학 ${entry.univCount}개 · ${entry.total.toLocaleString()}건`)}">
+              <span>${escapeHtml(entry.region)}</span>
+              <span class="condition-region-count">${entry.total.toLocaleString()}건</span>
+            </button>`;
+        }).join("")
+        : '<div class="dept-finder-selection-empty">현재 데이터에 지역 정보가 없습니다.</div>';
+
+      if (mode !== "some") {
+        metaEl.textContent = "전체 지역이 적용됩니다.";
+      } else if (!selected.length) {
+        metaEl.textContent = "아직 선택한 지역이 없습니다. 지역을 고르지 않으면 전체 지역이 적용됩니다.";
+      } else {
+        const missingCount = selected.length - selectedAvailableCount;
+        metaEl.textContent = `선택 ${selected.length}개 · ${formatRegionSelectionSummary(selected)}${missingCount ? ` · 현재 데이터에 없는 지역 ${missingCount}개 포함` : ""}`;
+      }
+      if (selectAllBtn) selectAllBtn.disabled = !entries.length || entries.every((entry) => selectedSet.has(entry.region));
+      if (clearBtn) clearBtn.disabled = !selected.length;
+
+      if (options.updateConditionSummary) {
+        renderUnivDirectory(records);
+        renderConditionQuerySummary(records);
+      }
+    }
+
+    function bindConditionRegionControls(records) {
+      const modeGroup = document.getElementById("condition-region-mode-group");
+      const optionsEl = document.getElementById("condition-region-options");
+      const selectAllBtn = document.getElementById("condition-region-select-all");
+      const clearBtn = document.getElementById("condition-region-clear");
+      if (modeGroup) {
+        modeGroup.querySelectorAll("[data-condition-region-mode]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const nextMode = btn.dataset.conditionRegionMode === "some" ? "some" : "all";
+            if (getConditionRegionMode() === nextMode) return;
+            filterState.conditionRegionMode = nextMode;
+            renderConditionRegionControls(records, { updateConditionSummary: true });
+          });
+        });
+      }
+      if (optionsEl) {
+        optionsEl.addEventListener("click", (event) => {
+          const trigger = event.target instanceof Element ? event.target.closest("[data-condition-region]") : null;
+          if (!trigger) return;
+          const region = trigger.getAttribute("data-condition-region") || "";
+          if (!region) return;
+          const current = Array.isArray(filterState.selectedRegions) ? filterState.selectedRegions : [];
+          filterState.selectedRegions = current.includes(region)
+            ? current.filter((item) => item !== region)
+            : [...current, region];
+          renderConditionRegionControls(records, { updateConditionSummary: true });
+        });
+      }
+      if (selectAllBtn) {
+        selectAllBtn.addEventListener("click", () => {
+          filterState.selectedRegions = getCachedRegionOptionEntries(records).map((entry) => entry.region);
+          renderConditionRegionControls(records, { updateConditionSummary: true });
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          filterState.selectedRegions = [];
+          renderConditionRegionControls(records, { updateConditionSummary: true });
+        });
+      }
     }
 
     function bindUnivDirectoryControls(records) {
@@ -5195,6 +5381,7 @@ body.protected-export-locked {
         univKeys: univEntries.map((entry) => entry.key).filter(Boolean),
         deptKeys: deptEntries.map((entry) => entry.key).filter(Boolean),
         subtypeKeys: subtypeEntries.map((entry) => entry.key).filter(Boolean),
+        regions: Array.isArray(criteria.regions) ? criteria.regions.filter((region) => typeof region === "string" && region) : [],
         deptGroupingMode: criteria.deptGroupingMode === "univ" ? "univ" : DEFAULT_DEPT_FINDER_GROUPING_MODE,
       };
     }
@@ -5218,11 +5405,14 @@ body.protected-export-locked {
       const univKeySet = new Set(normalizeConditionKeyList(rawUnivKeys, "univ"));
       const deptKeySet = new Set(deptKeys);
       const subtypeKeySet = new Set(normalizeConditionKeyList(rawSubtypeKeys, "subtype"));
+      const regions = Array.from(new Set((Array.isArray(source.regions) ? source.regions : [])
+        .filter((region) => typeof region === "string" && region)));
 
       return {
         univEntries: getCachedUnivFinderEntries(records).filter((entry) => univKeySet.has(entry.key)),
         deptEntries: getCachedDeptFinderEntries(records, deptGroupingMode).filter((entry) => deptKeySet.has(entry.key)),
         subtypeEntries: getCachedSubtypeFinderEntries(records).filter((entry) => subtypeKeySet.has(entry.key)),
+        regions,
         deptGroupingMode,
       };
     }
@@ -5233,6 +5423,7 @@ body.protected-export-locked {
         univEntries: getSelectedUnivEntries(getCachedUnivFinderEntries(records)),
         deptEntries: getSelectedDeptEntries(getCachedDeptFinderEntries(records, deptGroupingMode)),
         subtypeEntries: getSelectedSubtypeEntries(getCachedSubtypeFinderEntries(records)),
+        regions: getSelectedConditionRegions(),
         deptGroupingMode,
       };
     }
@@ -5241,7 +5432,8 @@ body.protected-export-locked {
       return Boolean(
         (Array.isArray(criteria.univEntries) && criteria.univEntries.length) ||
         (Array.isArray(criteria.deptEntries) && criteria.deptEntries.length) ||
-        (Array.isArray(criteria.subtypeEntries) && criteria.subtypeEntries.length)
+        (Array.isArray(criteria.subtypeEntries) && criteria.subtypeEntries.length) ||
+        (Array.isArray(criteria.regions) && criteria.regions.length)
       );
     }
 
@@ -5250,7 +5442,12 @@ body.protected-export-locked {
       const univEntries = Array.isArray(criteria.univEntries) ? criteria.univEntries : [];
       const deptEntries = Array.isArray(criteria.deptEntries) ? criteria.deptEntries : [];
       const subtypeEntries = Array.isArray(criteria.subtypeEntries) ? criteria.subtypeEntries : [];
+      const regions = Array.isArray(criteria.regions) ? criteria.regions.filter(Boolean) : [];
 
+      if (regions.length) {
+        const selectedRegions = new Set(regions);
+        filtered = filtered.filter((record) => selectedRegions.has(record.region || "미상"));
+      }
       if (univEntries.length) {
         const selectedUnivs = new Set(univEntries.map((entry) => entry.univ || "미상"));
         filtered = filtered.filter((record) => selectedUnivs.has(record.univ || "미상"));
@@ -5268,6 +5465,9 @@ body.protected-export-locked {
 
     function formatConditionCriteriaSummary(criteria = {}) {
       const parts = [];
+      if (Array.isArray(criteria.regions) && criteria.regions.length) {
+        parts.push(`지역 ${formatRegionSelectionSummary(criteria.regions)}`);
+      }
       if (criteria.univEntries && criteria.univEntries.length) {
         parts.push(`대학 ${formatUnivSelectionSummary(criteria.univEntries)}`);
       }
@@ -5290,13 +5490,14 @@ body.protected-export-locked {
       const hasCriteria = hasConditionCriteria(criteria);
       const filteredRecords = hasCriteria ? filterRecordsByConditionCriteria(records, criteria) : [];
       const conditionCounts = [
+        Array.isArray(criteria.regions) && criteria.regions.length ? `지역 ${criteria.regions.length}개` : "",
         criteria.univEntries.length ? `대학 ${criteria.univEntries.length}개` : "",
         criteria.deptEntries.length ? `학과 ${criteria.deptEntries.length}개` : "",
         criteria.subtypeEntries.length ? `세부유형 ${criteria.subtypeEntries.length}개` : "",
       ].filter(Boolean);
 
       if (!hasCriteria) {
-        summaryEl.innerHTML = `<div class="condition-summary-empty">대학, 학과, 세부유형 중 하나 이상을 선택해 주세요. 여러 종류를 함께 선택하면 AND 조건으로 좁혀집니다.</div>`;
+        summaryEl.innerHTML = `<div class="condition-summary-empty">지역(일부), 대학, 학과, 세부유형 중 하나 이상을 선택해 주세요. 여러 종류를 함께 선택하면 AND 조건으로 좁혀집니다.</div>`;
       } else {
         summaryEl.innerHTML = `
           <div class="condition-summary-main">
@@ -5324,6 +5525,9 @@ body.protected-export-locked {
           filterState.selectedUnivKeys = [];
           filterState.selectedDeptKeys = [];
           filterState.selectedSubtypeKeys = [];
+          filterState.conditionRegionMode = "all";
+          filterState.selectedRegions = [];
+          renderConditionRegionControls(records);
           renderUnivDirectory(records);
           renderDeptFinder(records);
           renderSubtypeFinder(records);
@@ -7168,6 +7372,7 @@ body.protected-export-locked {
       filterState.locationFilter = "all";
       const preloadedState = pre.uiState && typeof pre.uiState === "object" ? pre.uiState : {};
       excelExportDisabled = preloadedState.disableExcelExport === true;
+      sharedHtmlExportDisabled = preloadedState.disableSharedHtmlExport === true;
       renderFullReport(
         normalizedRecords,
         "",
